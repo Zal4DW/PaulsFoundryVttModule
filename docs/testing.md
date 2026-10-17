@@ -9,6 +9,8 @@ The module has three test layers. Each one catches a different kind of fault.
 | Integration | Quench | Inside a Foundry world | Yes | Quench window in Foundry, or the Playwright test |
 | Smoke (end to end) | Playwright | Real browser against Docker Foundry | Yes | `npm run test:e2e` |
 
+CI (`.github/workflows/ci.yml`) runs lint and unit tests only. It has no Foundry server, so run the smoke test yourself before a push.
+
 Keep logic that does not need `game` in `scripts/lib/`. That code takes no Foundry globals, so Vitest can test it in milliseconds. Code that touches documents, settings, hooks or the canvas gets a Quench test. Playwright checks that the whole thing loads on a real v14 server and that a user-visible flow works.
 
 ## One-time setup
