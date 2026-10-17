@@ -120,4 +120,57 @@ export function registerQuenchBatches(quench, moduleId) {
     },
     { displayName: "Paul's Foundry Module: party" }
   );
+
+  quench.registerBatch(
+    `${moduleId}.character`,
+    (context) => {
+      const { describe, it, assert, before, after } = context;
+      let originalCharacter = null;
+      let temp = null;
+
+      describe("Open Character keybinding", function () {
+        // Creating and deleting documents can take longer than Mocha's 2 second default.
+        this.timeout(10_000);
+
+        before(async () => {
+          originalCharacter = game.user.character?.id ?? null;
+          // An adversary, not a hero. A blank Crucible hero opens the character builder, and closing
+          // the builder waits on a confirmation dialog, so cleanup would never finish.
+          temp = await Actor.create({ name: "PFM Quench Hero", type: game.system.id === "crucible" ? "adversary" : "character" });
+        });
+
+        after(async () => {
+          await temp?.sheet.close();
+          await game.user.update({ character: originalCharacter });
+          await temp?.delete();
+        });
+
+        it("is registered on the C key", () => {
+          const action = game.keybindings.actions.get(`${moduleId}.openCharacter`);
+          assert.exists(action);
+          assert.isFalse(action.restricted, "players must be able to use it");
+          assert.include(game.keybindings.get(moduleId, "openCharacter").map((b) => b.key), "KeyC");
+        });
+
+        it("runs before core's C (character sheet) binding", function () {
+          const core = game.keybindings.actions.get("core.characterSheet");
+          if (!core) this.skip();
+          const ours = game.keybindings.actions.get(`${moduleId}.openCharacter`);
+          const compare = foundry.helpers.interaction.ClientKeybindings._compareActions;
+          assert.isBelow(compare(ours, core), 0, "core's handler would consume C first");
+        });
+
+        it("opens the assigned character when it is the only candidate", async function () {
+          // Other owned characters or selected tokens in the world would make this a picker instead.
+          await game.user.update({ character: temp.id });
+          const result = await game.modules.get(moduleId).api.openCharacter();
+          if (result.mode === "pick") this.skip();
+          assert.equal(result.mode, "open");
+          assert.equal(result.uuid, temp.uuid);
+          assert.isTrue(temp.sheet.rendered);
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: character" }
+  );
 }

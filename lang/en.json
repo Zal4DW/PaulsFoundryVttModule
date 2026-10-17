@@ -8,5 +8,13 @@
   "PFM.Keybindings.OpenParty.Name": "Open Party Sheet",
   "PFM.Keybindings.OpenParty.Hint": "Open the party group sheet set in Crucible's Primary Adventuring Party setting.",
   "PFM.Party.Missing": "No party is set. A GM can choose one in the Crucible system settings, under Primary Adventuring Party.",
+  "PFM.Keybindings.OpenCharacter.Name": "Open Character Sheet",
+  "PFM.Keybindings.OpenCharacter.Hint": "In combat, open the actor whose turn it is if you own it. Otherwise open your selected token's actor, or pick from your characters.",
+  "PFM.Character.None": "You have no character to open. Select a token you own, or ask a GM to assign you a character.",
+  "PFM.Character.PickTitle": "Open Character Sheet",
+  "PFM.Character.PickHint": "Choose a character. Select or target one of your tokens to put it first, or select a single token to skip this list.",
+  "PFM.Character.Hint.selected": "selected",
+  "PFM.Character.Hint.targeted": "targeted",
+  "PFM.Character.Hint.assigned": "assigned",
   "PFM.Party.Denied": "You do not have permission to view the party. A GM can give you Limited or higher access to the party actor."
 }

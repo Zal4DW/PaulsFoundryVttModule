@@ -105,6 +105,40 @@ test.describe("Paul's Foundry Module smoke test", () => {
     }
   });
 
+  test("pressing C runs the module's handler and opens the assigned character", async ({ page }) => {
+    // Core also binds C and opens the assigned character, so a rendered sheet alone proves nothing.
+    // The module's own hook proves its handler ran instead of core's.
+    const setup = await page.evaluate(async () => {
+      globalThis.__pfmOpenCharacter = null;
+      Hooks.once("pauls-foundry-module.openCharacter", (result) => (globalThis.__pfmOpenCharacter = result));
+      const original = game.user.character?.id ?? null;
+      // An adversary, not a hero. A blank Crucible hero opens the character builder, whose close waits on a dialog.
+      const type = game.system.id === "crucible" ? "adversary" : "character";
+      const hero = await Actor.create({ name: "PFM Smoke Hero", type });
+      await game.user.update({ character: hero.id });
+      await Promise.all([...foundry.applications.instances.values()].filter((a) => a.hasFrame && a.rendered).map((a) => a.close()));
+      canvas?.tokens?.releaseAll();
+      document.activeElement?.blur(); // Keybindings do not fire while a text field has focus.
+      return { heroId: hero.id, heroUuid: hero.uuid, original };
+    });
+
+    try {
+      await page.keyboard.press("c");
+      const result = await page
+        .waitForFunction(() => globalThis.__pfmOpenCharacter, null, { timeout: 10_000 })
+        .then((h) => h.jsonValue());
+      expect(result).toEqual({ mode: "open", uuid: setup.heroUuid });
+      await page.waitForFunction((id) => game.actors.get(id)?.sheet.rendered === true, setup.heroId, { timeout: 10_000 });
+    } finally {
+      await page.evaluate(async ({ heroId, original }) => {
+        const hero = game.actors.get(heroId);
+        await hero?.sheet.close();
+        await game.user.update({ character: original });
+        await hero?.delete();
+      }, setup);
+    }
+  });
+
   test("Quench batches pass", async ({ page }) => {
     const hasQuench = await page.evaluate(() => typeof globalThis.quench !== "undefined");
     test.skip(!hasQuench, "Quench is not active in the test world");
