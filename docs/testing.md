@@ -98,7 +98,7 @@ The smoke test joins the world, checks the server is v14 and the module is activ
 ## Known limits
 
 - Quench 0.10.0 declares Foundry 13 as verified. On v14 (build 369) it works, with two quirks. It logs deprecation warnings for the globals `Game` and `FilePicker`, which v15 will remove. Its reporter also throws `Cannot read properties of undefined (reading 'querySelector')` and the run never ends if the Quench window is not open. The smoke test calls `quench.app.render(true)` before `runBatches` to avoid this.
-- The v14 API docs type the `chatMessage` hook as `void`. Returning `false` from it still stops the raw `/hello` text from posting on v14.369. The smoke test checks this on every run.
+- On v14 the module registers `/hello` in `ChatLog.CHAT_COMMANDS`. v14 rejects any slash command missing from that registry with "is not a valid chat message command". On v13 the module uses the `chatMessage` hook instead. The v14 chat box is a ProseMirror editor and sends HTML (`<p>/hello</p>`), so a test that calls `ui.chat.processMessage("/hello")` with a plain string does not exercise the real path. The smoke test types into `#chat-message` instead.
 - Foundry allows one connection per user. If Gamemaster is logged in in your own browser, the smoke test cannot join and says so. Log out (or close the tab) before `npm run test:e2e`.
 - Playwright runs at 1280x800, because Foundry needs at least 1024x768.
 - Check your license terms before you run this server at the same time as your main game server.

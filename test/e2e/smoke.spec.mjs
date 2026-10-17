@@ -39,21 +39,39 @@ test.describe("Paul's Foundry Module smoke test", () => {
     expect(info.active).toBe(true);
   });
 
-  test("/hello posts a decorated greeting", async ({ page }) => {
-    const { messageId, rawMessageId } = await page.evaluate(async () => {
-      const posted = new Promise((resolve) => Hooks.once("createChatMessage", resolve));
-      // processMessage resolves to the created message, or to nothing when a chatMessage hook returns false.
-      const raw = await ui.chat.processMessage("/hello");
-      return { messageId: (await posted).id, rawMessageId: raw?.id ?? null };
+  test("typing /hello in the chat box posts a decorated greeting", async ({ page }) => {
+    // Use the real chat box, not ui.chat.processMessage("/hello"). The v14 box is ProseMirror and sends
+    // "<p>/hello</p>", and a plain-string test missed that unknown commands are rejected on this path.
+    await page.evaluate(async () => {
+      // Close framed windows (Crucible opens its welcome journal on login) so nothing covers the chat box.
+      const open = [...foundry.applications.instances.values()].filter((app) => app.hasFrame && app.rendered);
+      await Promise.all(open.map((app) => app.close()));
+      ui.sidebar.changeTab("chat", "primary");
+      ui.sidebar.expand();
     });
+    const before = await page.evaluate(() => game.messages.contents.map((m) => m.id));
+    // Focus instead of click. Crucible's welcome journal can open a moment after login and cover the box.
+    await page.locator('#chat-message [contenteditable="true"]').focus();
+    await page.keyboard.type("/hello");
+    await page.keyboard.press("Enter");
+
+    const newIds = await page.waitForFunction(
+      (ids) => {
+        const fresh = game.messages.contents.filter((m) => !ids.includes(m.id)).map((m) => m.id);
+        return fresh.length ? fresh : null;
+      },
+      before,
+      { timeout: 10_000 }
+    ).then((h) => h.jsonValue());
 
     try {
-      // The v14 docs type the chatMessage hook as void. This checks that returning false still cancels the raw text.
-      expect(rawMessageId, "the raw /hello text was posted to chat").toBeNull();
-      await expect(page.locator(`[data-message-id="${messageId}"] .pfm-message`).first()).toBeAttached();
-      await expect(page.locator(`[data-message-id="${messageId}"].pfm-chat-message`).first()).toBeAttached();
+      expect(newIds, "expected exactly one new message, the greeting").toHaveLength(1);
+      const [id] = newIds;
+      await expect(page.locator(`[data-message-id="${id}"] .pfm-message`).first()).toBeAttached();
+      await expect(page.locator(`[data-message-id="${id}"].pfm-chat-message`).first()).toBeAttached();
+      await expect(page.getByText("is not a valid chat message command")).toHaveCount(0);
     } finally {
-      await page.evaluate((ids) => Promise.all(ids.map((id) => game.messages.get(id)?.delete())), [messageId, rawMessageId]);
+      await page.evaluate((ids) => Promise.all(ids.map((id) => game.messages.get(id)?.delete())), newIds);
     }
   });
 

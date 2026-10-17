@@ -28,17 +28,25 @@ export function registerQuenchBatches(quench, moduleId) {
         });
       });
 
-      describe("chatMessage hook", () => {
-        it("blocks the raw /hello text and posts the greeting instead", async () => {
-          const posted = new Promise((resolve) => Hooks.once("createChatMessage", resolve));
-          assert.isFalse(Hooks.call("chatMessage", ui.chat, "/hello", {}));
-          const message = await posted;
-          created.push(message.id);
-          assert.include(message.content, 'class="pfm-message"');
+      describe("/hello chat command", () => {
+        // The v14 chat box is ProseMirror, so typed text reaches processMessage as HTML.
+        const typed = "<p>/hello</p>";
+
+        it("is registered in ChatLog.CHAT_COMMANDS on v14", function () {
+          if (Number(game.version.split(".")[0]) < 14) this.skip();
+          const ChatLog = foundry.applications.sidebar.tabs.ChatLog;
+          assert.property(ChatLog.CHAT_COMMANDS, "hello");
+          assert.equal(ChatLog.parse(typed)[0], "hello");
         });
 
-        it("lets other messages through", () => {
-          assert.isTrue(Hooks.call("chatMessage", ui.chat, "just chatting", {}));
+        it("posts the greeting and not the raw text", async () => {
+          const posted = new Promise((resolve) => Hooks.once("createChatMessage", resolve));
+          const raw = await ui.chat.processMessage(typed);
+          const message = await posted;
+          created.push(message.id);
+          if (raw) created.push(raw.id);
+          assert.isUndefined(raw, "ChatLog posted the raw /hello text");
+          assert.include(message.content, 'class="pfm-message"');
         });
       });
 
