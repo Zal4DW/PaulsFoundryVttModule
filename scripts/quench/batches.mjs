@@ -23,8 +23,9 @@ export function registerQuenchBatches(quench, moduleId) {
           assert.isTrue(game.settings.settings.has(`${moduleId}.greeting`));
         });
 
-        it("exposes sayHello on its API", () => {
+        it("exposes sayHello and openParty on its API", () => {
           assert.isFunction(game.modules.get(moduleId).api?.sayHello);
+          assert.isFunction(game.modules.get(moduleId).api?.openParty);
         });
       });
 
@@ -62,5 +63,51 @@ export function registerQuenchBatches(quench, moduleId) {
       });
     },
     { displayName: "Paul's Foundry Module: hello" }
+  );
+
+  quench.registerBatch(
+    `${moduleId}.party`,
+    (context) => {
+      const { describe, it, assert, before, after } = context;
+      let original = null;
+      let tempParty = null;
+
+      describe("Open Party keybinding", () => {
+        before(async function () {
+          if (game.system.id !== "crucible") return this.skip();
+          // Point Crucible's party setting at a throwaway group actor, and restore it afterwards.
+          original = game.settings.get("crucible", "party");
+          tempParty = await Actor.create({ name: "PFM Quench Party", type: "group" });
+          await game.settings.set("crucible", "party", tempParty.id);
+        });
+
+        after(async () => {
+          if (game.system.id !== "crucible") return;
+          await tempParty?.sheet.close();
+          await game.settings.set("crucible", "party", original);
+          await tempParty?.delete();
+        });
+
+        it("is registered on the P key", () => {
+          const action = game.keybindings.actions.get(`${moduleId}.openParty`);
+          assert.exists(action);
+          assert.isFalse(action.restricted, "players must be able to use it");
+          const keys = game.keybindings.get(moduleId, "openParty").map((b) => b.key);
+          assert.include(keys, "KeyP");
+        });
+
+        it("opens the party sheet", async () => {
+          assert.equal(await game.modules.get(moduleId).api.openParty(), "open");
+          assert.isTrue(tempParty.sheet.rendered);
+        });
+
+        it("reports a missing party", async () => {
+          await game.settings.set("crucible", "party", null);
+          assert.equal(await game.modules.get(moduleId).api.openParty(), "missing");
+          await game.settings.set("crucible", "party", tempParty.id);
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: party" }
   );
 }

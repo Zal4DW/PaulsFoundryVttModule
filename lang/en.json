@@ -4,5 +4,9 @@
   "PFM.Settings.Greeting.Name": "Greeting",
   "PFM.Settings.Greeting.Hint": "Text used in the hello message.",
   "PFM.Settings.Greeting.Default": "Hello from Paul's Foundry Module!",
-  "PFM.Ready": "Paul's Foundry Module is ready."
+  "PFM.Ready": "Paul's Foundry Module is ready.",
+  "PFM.Keybindings.OpenParty.Name": "Open Party Sheet",
+  "PFM.Keybindings.OpenParty.Hint": "Open the party group sheet set in Crucible's Primary Adventuring Party setting.",
+  "PFM.Party.Missing": "No party is set. A GM can choose one in the Crucible system settings, under Primary Adventuring Party.",
+  "PFM.Party.Denied": "You do not have permission to view the party. A GM can give you Limited or higher access to the party actor."
 }

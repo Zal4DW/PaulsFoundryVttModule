@@ -1,4 +1,5 @@
 import { greetingContent, HELLO_PATTERN, isHelloCommand } from "./lib/hello.mjs";
+import { OPEN_PARTY_KEY, partyOpenDecision } from "./lib/party.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 
@@ -20,8 +21,22 @@ Hooks.once("init", () => {
     default: "Hello from Paul's Foundry Module!"
   });
 
+  // P opens the party sheet, for players and the GM. Keybindings must be registered during init.
+  // Foundry does not run keybindings while the user types in a text field, so chat is not affected.
+  game.keybindings.register(MODULE_ID, "openParty", {
+    name: "PFM.Keybindings.OpenParty.Name",
+    hint: "PFM.Keybindings.OpenParty.Hint",
+    editable: [{ key: OPEN_PARTY_KEY }],
+    onDown: () => {
+      openParty();
+      return true; // Consume the key press.
+    },
+    restricted: false,
+    precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
+  });
+
   // Public API, used by macros and by the Quench tests.
-  game.modules.get(MODULE_ID).api = { sayHello };
+  game.modules.get(MODULE_ID).api = { sayHello, openParty };
 });
 
 Hooks.once("ready", () => {
@@ -37,6 +52,22 @@ async function sayHello() {
     speaker: ChatMessage.getSpeaker(),
     content: greetingContent(greeting, foundry.utils.escapeHTML)
   });
+}
+
+/**
+ * Open the party sheet, or bring it to the front if it is already open.
+ * The party is the group actor set in Crucible's "Primary Adventuring Party" setting (crucible.party).
+ * @returns {Promise<"missing"|"denied"|"open">}
+ */
+async function openParty() {
+  const party = globalThis.crucible?.party ?? null;
+  const canView = party?.testUserPermission(game.user, "LIMITED") ?? false;
+  const decision = partyOpenDecision(party, canView);
+  if (decision === "missing") ui.notifications.warn(game.i18n.localize("PFM.Party.Missing"));
+  else if (decision === "denied") ui.notifications.warn(game.i18n.localize("PFM.Party.Denied"));
+  else if (party.sheet.rendered) party.sheet.bringToFront();
+  else await party.sheet.render({ force: true });
+  return decision;
 }
 
 // Chat interaction: typing "/hello" posts the greeting instead of the raw text.

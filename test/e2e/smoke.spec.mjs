@@ -75,6 +75,36 @@ test.describe("Paul's Foundry Module smoke test", () => {
     }
   });
 
+  test("pressing P opens the party sheet", async ({ page }) => {
+    const isCrucible = await page.evaluate(() => game.system.id === "crucible");
+    test.skip(!isCrucible, "The party sheet comes from the Crucible system");
+
+    // Use a throwaway group actor as the party, and restore the setting afterwards.
+    const { partyId, original } = await page.evaluate(async () => {
+      const original = game.settings.get("crucible", "party");
+      const party = await Actor.create({ name: "PFM Smoke Party", type: "group" });
+      await game.settings.set("crucible", "party", party.id);
+      await Promise.all([...foundry.applications.instances.values()].filter((a) => a.hasFrame && a.rendered).map((a) => a.close()));
+      document.activeElement?.blur(); // Keybindings do not fire while a text field has focus.
+      return { partyId: party.id, original };
+    });
+
+    try {
+      await page.keyboard.press("p");
+      await page.waitForFunction((id) => game.actors.get(id)?.sheet.rendered === true, partyId, { timeout: 10_000 });
+    } finally {
+      await page.evaluate(
+        async ({ partyId, original }) => {
+          const party = game.actors.get(partyId);
+          await party?.sheet.close();
+          await game.settings.set("crucible", "party", original);
+          await party?.delete();
+        },
+        { partyId, original }
+      );
+    }
+  });
+
   test("Quench batches pass", async ({ page }) => {
     const hasQuench = await page.evaluate(() => typeof globalThis.quench !== "undefined");
     test.skip(!hasQuench, "Quench is not active in the test world");
