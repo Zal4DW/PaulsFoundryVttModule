@@ -1,8 +1,13 @@
 import { greetingContent, HELLO_PATTERN, isHelloCommand } from "./lib/hello.mjs";
 import { OPEN_PARTY_KEY, partyOpenDecision } from "./lib/party.mjs";
 import { chooseCharacter, OPEN_CHARACTER_KEY } from "./lib/character.mjs";
+import { fightFromExport } from "./lib/stats.mjs";
+import { StatsDashboard } from "./stats/dashboard.mjs";
+import { startRecorder } from "./stats/recorder.mjs";
+import { registerStatsSettings, updateLog, flushLog } from "./stats/store.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
+const STATS_PATTERN = /^\/stats\s*$/i;
 
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "enabled", {
@@ -61,11 +66,15 @@ Hooks.once("init", () => {
     precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
   });
 
+  // Fight stats. Every user can read them; the GM client records them. A change re-draws open dashboards.
+  registerStatsSettings(MODULE_ID, () => { if (statsApp?.rendered) statsApp.render(); });
+
   // Public API, used by macros and by the Quench tests.
-  game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter };
+  game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter, openStats, importFight };
 });
 
 Hooks.once("ready", () => {
+  startRecorder(MODULE_ID);
   if (!game.settings.get(MODULE_ID, "enabled")) return;
   console.log(`${MODULE_ID} | ready (system: ${game.system.id})`);
   ui.notifications.info(game.i18n.localize("PFM.Ready"));
@@ -94,6 +103,30 @@ async function openParty() {
   else if (party.sheet.rendered) party.sheet.bringToFront();
   else await party.sheet.render({ force: true });
   return decision;
+}
+
+let statsApp = null;
+
+/** Open the fight stats dashboard, or bring it to the front. */
+async function openStats(options = {}) {
+  statsApp ??= new StatsDashboard(MODULE_ID, options);
+  if (statsApp.rendered) statsApp.bringToFront();
+  else await statsApp.render({ force: true });
+  return statsApp;
+}
+
+/**
+ * Add a fight from an exported fight file (the shape of test/fixtures/day1-ring-of-valor.json). GM only.
+ * @param {object|string} data  The export, or a URL to fetch it from.
+ */
+async function importFight(data, { id, name } = {}) {
+  if (!game.user.isGM) throw new Error("Only a GM can import fights.");
+  if (typeof data === "string") data = await (await fetch(data)).json();
+  const fight = fightFromExport(data, { id, name });
+  updateLog(MODULE_ID, (log) => { log.fights[fight.id] = fight; });
+  await flushLog(MODULE_ID);
+  ui.notifications.info(game.i18n.format("PFM.Stats.Import.Done", { name: fight.name }));
+  return fight;
 }
 
 /** Open an actor's sheet, or bring it to the front if it is already open. */
@@ -194,9 +227,14 @@ Hooks.once("init", () => {
         return false; // We created our own message, so ChatLog must not create one.
       }
     };
+    ChatLog.CHAT_COMMANDS.stats = {
+      rgx: STATS_PATTERN,
+      fn: () => { openStats(); return false; }
+    };
     return;
   }
   Hooks.on("chatMessage", (_log, message) => {
+    if (STATS_PATTERN.test(message.trim())) { openStats(); return false; }
     if (!game.settings.get(MODULE_ID, "enabled")) return true;
     if (!isHelloCommand(message)) return true;
     sayHello();

@@ -2,3 +2,44 @@
   border-left: 3px solid var(--color-border-highlight, #ff6400);
   padding-left: 0.5em;
 }
+
+/* Stats dashboard */
+.pfm-stats .window-content { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.pfm-stats .pfm-head { display: flex; gap: 0.5rem; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--color-border, #555); flex-wrap: wrap; }
+.pfm-stats .pfm-fight { width: auto; max-width: 18rem; }
+.pfm-stats .pfm-tabs { display: flex; gap: 0.25rem; }
+.pfm-stats .pfm-tab { width: auto; padding: 0 0.75rem; }
+.pfm-stats .pfm-tab.active, .pfm-stats .pfm-heroes button.active { border-color: var(--color-border-highlight, #ff6400); box-shadow: 0 0 4px var(--color-border-highlight, #ff6400); }
+.pfm-stats .pfm-body { overflow-y: auto; padding: 0.5rem 0.75rem; flex: 1; }
+.pfm-stats .pfm-empty { padding: 2rem; text-align: center; opacity: 0.8; }
+.pfm-stats h3 { margin: 0.75rem 0 0.25rem; border-bottom: 1px solid var(--color-border, #555); }
+.pfm-stats .pfm-score { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.5rem; text-align: center; }
+.pfm-stats .pfm-score > div, .pfm-stats .pfm-award, .pfm-stats .pfm-tile { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--color-border, #555); border-radius: 4px; padding: 0.4rem; }
+.pfm-stats .pfm-big { display: block; font-size: 1.6rem; font-weight: bold; line-height: 1.2; }
+.pfm-stats label { display: block; font-size: 0.75rem; text-transform: uppercase; opacity: 0.75; }
+.pfm-stats .pfm-mvp .pfm-big { color: var(--color-warm-1, #ff6400); }
+.pfm-stats .pfm-awards { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.4rem; margin: 0.5rem 0; }
+.pfm-stats .pfm-award strong, .pfm-stats .pfm-tile strong { display: block; font-size: 1.1rem; }
+.pfm-stats .pfm-award span, .pfm-stats .pfm-tile em { font-size: 0.8rem; opacity: 0.8; }
+.pfm-stats .pfm-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 0.25rem 0; }
+.pfm-stats .pfm-table th, .pfm-stats .pfm-table td { padding: 0.15rem 0.3rem; text-align: center; white-space: nowrap; }
+.pfm-stats .pfm-table td:first-child, .pfm-stats .pfm-table th:first-child { text-align: left; }
+.pfm-stats .pfm-table tr.pfm-total { font-weight: bold; border-top: 1px solid var(--color-border, #555); }
+.pfm-stats .pfm-table tr.pfm-foe { opacity: 0.85; font-style: italic; }
+.pfm-stats .pfm-table a { cursor: pointer; text-decoration: underline; }
+.pfm-stats .pfm-note { font-size: 0.75rem; opacity: 0.7; }
+.pfm-stats .pfm-kills { list-style: none; padding: 0; margin: 0; }
+.pfm-stats .pfm-kills li { margin-bottom: 0.4rem; }
+.pfm-stats .pfm-sharebar { display: flex; height: 1.2rem; border-radius: 3px; overflow: hidden; font-size: 0.7rem; margin-top: 0.15rem; }
+.pfm-stats .pfm-share { background: #4a6a8a; color: #fff; padding: 0 0.3rem; white-space: nowrap; overflow: hidden; border-right: 1px solid rgba(0, 0, 0, 0.4); }
+.pfm-stats .pfm-share.finisher { background: #a0522d; }
+.pfm-stats .pfm-heroes { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.pfm-stats .pfm-heroes button { width: auto; }
+.pfm-stats .pfm-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.4rem; }
+.pfm-stats .pfm-tile small { font-size: 0.75rem; font-weight: normal; opacity: 0.8; }
+.pfm-stats .pfm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.pfm-stats .pfm-die { display: grid; grid-template-columns: 1.2rem 1fr 2rem; align-items: center; gap: 0.3rem; font-size: 0.8rem; }
+.pfm-stats .pfm-diebar { height: 0.7rem; background: #4a6a8a; border-radius: 2px; min-width: 1px; }
+.pfm-stats .pfm-major h4 { margin: 0.5rem 0 0; }
+.pfm-stats .pfm-plays { margin: 0; padding-left: 1.5rem; font-size: 0.85rem; }
+.pfm-stats .pfm-plays li.kill { font-weight: bold; color: var(--color-warm-1, #ff6400); }

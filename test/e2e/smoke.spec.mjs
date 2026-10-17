@@ -75,6 +75,26 @@ test.describe("Paul's Foundry Module smoke test", () => {
     }
   });
 
+  test("typing /stats opens the stats dashboard and posts nothing", async ({ page }) => {
+    await page.evaluate(async () => {
+      const open = [...foundry.applications.instances.values()].filter((app) => app.hasFrame && app.rendered);
+      await Promise.all(open.map((app) => app.close()));
+      ui.sidebar.changeTab("chat", "primary");
+      ui.sidebar.expand();
+    });
+    const before = await page.evaluate(() => game.messages.size);
+    await page.locator('#chat-message [contenteditable="true"]').focus();
+    await page.keyboard.type("/stats");
+    await page.keyboard.press("Enter");
+
+    // The dashboard shows either a fight or the empty notice, depending on what this world has recorded.
+    await expect(page.locator("#pfm-stats")).toBeVisible();
+    await expect(page.locator("#pfm-stats .pfm-head, #pfm-stats .pfm-empty").first()).toBeVisible();
+    expect(await page.evaluate(() => game.messages.size)).toBe(before);
+    await expect(page.getByText("is not a valid chat message command")).toHaveCount(0);
+    await page.evaluate(() => foundry.applications.instances.get("pfm-stats")?.close());
+  });
+
   test("pressing P opens the party sheet", async ({ page }) => {
     const isCrucible = await page.evaluate(() => game.system.id === "crucible");
     test.skip(!isCrucible, "The party sheet comes from the Crucible system");

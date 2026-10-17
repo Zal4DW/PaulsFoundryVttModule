@@ -164,6 +164,9 @@ export function registerQuenchBatches(quench, moduleId) {
           // Other owned characters or selected tokens in the world make this a picker instead. The picker waits
           // for a click, so close it as soon as it renders. openCharacter then resolves with nothing picked.
           await game.user.update({ character: temp.id });
+          // A selected or targeted token outranks the assigned character, so clear both just before the call.
+          canvas?.tokens?.releaseAll();
+          canvas?.tokens?.setTargets([]);
           const closePicker = Hooks.on("renderDialogV2", (dialog) => dialog.close());
           let result;
           try {
