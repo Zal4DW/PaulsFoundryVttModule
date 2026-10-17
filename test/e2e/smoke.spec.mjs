@@ -137,20 +137,29 @@ test.describe("Paul's Foundry Module smoke test", () => {
       const hero = await Actor.create({ name: "PFM Smoke Hero", type });
       await game.user.update({ character: hero.id });
       await Promise.all([...foundry.applications.instances.values()].filter((a) => a.hasFrame && a.rendered).map((a) => a.close()));
+      // A selected or targeted token, or an owned actor on the active turn, outranks the assigned character.
       canvas?.tokens?.releaseAll();
+      canvas?.tokens?.setTargets([]);
+      // Other player-owned characters open a picker, which waits for a click. Close it, and skip below.
+      globalThis.__pfmClosePicker = Hooks.on("renderDialogV2", (dialog) => dialog.close());
       document.activeElement?.blur(); // Keybindings do not fire while a text field has focus.
-      return { heroId: hero.id, heroUuid: hero.uuid, original };
+      const turn = game.combat?.started ? game.combat.combatant?.actor : null;
+      return { heroId: hero.id, heroUuid: hero.uuid, original, activeTurnUuid: turn?.isOwner ? turn.uuid : null };
     });
 
     try {
+      test.skip(!!setup.activeTurnUuid, "An owned combatant has the active turn, so C opens that actor");
       await page.keyboard.press("c");
       const result = await page
         .waitForFunction(() => globalThis.__pfmOpenCharacter, null, { timeout: 10_000 })
         .then((h) => h.jsonValue());
+      test.skip(result?.mode === "pick", "Other characters in this world open the picker");
       expect(result).toEqual({ mode: "open", uuid: setup.heroUuid });
       await page.waitForFunction((id) => game.actors.get(id)?.sheet.rendered === true, setup.heroId, { timeout: 10_000 });
     } finally {
       await page.evaluate(async ({ heroId, original }) => {
+        Hooks.off("renderDialogV2", globalThis.__pfmClosePicker);
+        delete globalThis.__pfmClosePicker;
         const hero = game.actors.get(heroId);
         await hero?.sheet.close();
         await game.user.update({ character: original });

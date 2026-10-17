@@ -44,7 +44,13 @@ export function metaFor(key, combat = game.combat) {
 /** Make sure every combatant of the running combat has metadata, and refresh dead / defeated flags. */
 function refreshMeta(fight, combat = game.combat) {
   for (const c of combat?.combatants ?? []) fight.meta[c.tokenId] = metaFor(c.tokenId, combat);
-  for (const key of Object.keys(fight.meta)) if (!combat?.combatants.some((c) => c.tokenId === key)) fight.meta[key] = { ...fight.meta[key], ...metaFor(key, combat), combatantId: fight.meta[key].combatantId };
+  for (const key of Object.keys(fight.meta)) {
+    if (combat?.combatants.some((c) => c.tokenId === key)) continue;
+    const fresh = metaFor(key, combat);
+    // A deleted token (often a defeated minion) resolves to nothing. Keep what was recorded, or its kill is lost.
+    if (!fresh.actorId) continue;
+    fight.meta[key] = { ...fight.meta[key], ...fresh, combatantId: fight.meta[key].combatantId, dead: fight.meta[key].dead || fresh.dead };
+  }
 }
 
 /** Exact feet moved for a Crucible movement id, from the token's movement history (cleared at turn change). */

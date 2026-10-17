@@ -25,6 +25,9 @@ export function listFights(moduleId) {
 
 let pending = null;
 let timer = null;
+// The log handed to game.settings.set while that save is in flight. Foundry updates the setting cache only
+// after the server confirms, so a batch started in that window must build on this, not on the stale cache.
+let saving = null;
 
 /**
  * Change the log and save it. Writes are batched, because one action can create and then update several messages.
@@ -33,14 +36,10 @@ let timer = null;
  */
 export function updateLog(moduleId, mutate) {
   if (!game.user.isGM) return;
-  pending ??= foundry.utils.deepClone(readLog(moduleId));
+  pending ??= foundry.utils.deepClone(saving ?? readLog(moduleId));
   mutate(pending);
   clearTimeout(timer);
-  timer = setTimeout(async () => {
-    const log = pending;
-    pending = null;
-    await game.settings.set(moduleId, STATS_SETTING, log);
-  }, 750);
+  timer = setTimeout(() => flushLog(moduleId), 750);
 }
 
 /** Save now, without waiting for the batch timer (used before combat data disappears). */
@@ -49,5 +48,10 @@ export async function flushLog(moduleId) {
   clearTimeout(timer);
   const log = pending;
   pending = null;
-  await game.settings.set(moduleId, STATS_SETTING, log);
+  saving = log;
+  try {
+    await game.settings.set(moduleId, STATS_SETTING, log);
+  } finally {
+    if (saving === log) saving = null; // The cache now holds this log, unless a newer save started.
+  }
 }

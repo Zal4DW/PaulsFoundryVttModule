@@ -121,7 +121,11 @@ async function openStats(options = {}) {
  */
 async function importFight(data, { id, name } = {}) {
   if (!game.user.isGM) throw new Error("Only a GM can import fights.");
-  if (typeof data === "string") data = await (await fetch(data)).json();
+  if (typeof data === "string") {
+    const res = await fetch(data);
+    if (!res.ok) throw new Error(`Could not load fight export ${data}: HTTP ${res.status}`);
+    data = await res.json();
+  }
   const fight = fightFromExport(data, { id, name });
   updateLog(MODULE_ID, (log) => { log.fights[fight.id] = fight; });
   await flushLog(MODULE_ID);
