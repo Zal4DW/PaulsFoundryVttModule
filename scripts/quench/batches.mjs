@@ -110,8 +110,11 @@ export function registerQuenchBatches(quench, moduleId) {
 
         it("reports a missing party", async () => {
           await game.settings.set("crucible", "party", null);
-          assert.equal(await game.modules.get(moduleId).api.openParty(), "missing");
-          await game.settings.set("crucible", "party", tempParty.id);
+          try {
+            assert.equal(await game.modules.get(moduleId).api.openParty(), "missing");
+          } finally {
+            await game.settings.set("crucible", "party", tempParty.id);
+          }
         });
       });
     },
