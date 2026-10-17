@@ -1,0 +1,37 @@
+# Local Foundry VTT v14 server for developing and testing the module.
+# Setup steps: docs/testing.md
+services:
+  foundry:
+    # Tracks the newest v14 build. Pin an exact tag (for example 14.369.0) if you need repeatable runs.
+    image: felddy/foundryvtt:14
+    # Keep the hostname fixed. Foundry ties the license check to it.
+    hostname: pfm-foundry-dev
+    init: true
+    restart: unless-stopped
+    ports:
+      # Bound to this machine only, so other devices on the network cannot reach the Setup screen.
+      # Host port 30100, so it does not clash with a normal Foundry server on 30000.
+      - "127.0.0.1:30100:30000"
+    environment:
+      TZ: "Europe/London"
+      # Launch this world on start-up so the Playwright tests can join it straight away.
+      # Create the world in the browser once, then set this to its id.
+      FOUNDRY_WORLD: "pfm-test"
+      # Keep a copy of the downloaded Foundry release so a rebuild does not download it again.
+      CONTAINER_CACHE: "/data/container_cache"
+    secrets:
+      - source: foundry_credentials
+        target: config.json
+    volumes:
+      # Foundry config, worlds, systems, other modules and logs. Gitignored.
+      - ./.foundry/data:/data
+      # Bind-mount the module files, so an edit shows up after a browser refresh (F5).
+      - ./module.json:/data/Data/modules/pauls-foundry-module/module.json
+      - ./scripts:/data/Data/modules/pauls-foundry-module/scripts
+      - ./styles:/data/Data/modules/pauls-foundry-module/styles
+      - ./lang:/data/Data/modules/pauls-foundry-module/lang
+
+secrets:
+  foundry_credentials:
+    # Copy secrets/foundry.example.json to this path and fill it in. Gitignored.
+    file: ./secrets/foundry.json
