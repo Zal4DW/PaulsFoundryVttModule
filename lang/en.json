@@ -5,6 +5,8 @@
   "PFM.Settings.Greeting.Hint": "Text used in the hello message.",
   "PFM.Settings.Greeting.Default": "Hello from Paul's Foundry Module!",
   "PFM.Ready": "Paul's Foundry Module is ready.",
+  "PFM.Settings.KeepCoreHotbar.Name": "Keep Foundry's Hotbar with Crucible Tongs",
+  "PFM.Settings.KeepCoreHotbar.Hint": "Crucible Tongs replaces Foundry's macro hotbar while it shows your character, and its Macro tab holds the same macros. Turn this on to see both bars. Has no effect without Crucible Tongs.",
   "PFM.Keybindings.OpenParty.Name": "Open Party Sheet",
   "PFM.Keybindings.OpenParty.Hint": "Open the party group sheet set in Crucible's Primary Adventuring Party setting.",
   "PFM.Party.Missing": "No party is set. A GM can choose one in the Crucible system settings, under Primary Adventuring Party.",

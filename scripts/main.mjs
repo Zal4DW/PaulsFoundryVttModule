@@ -21,6 +21,15 @@ Hooks.once("init", () => {
     type: String,
     default: "Hello from Paul's Foundry Module!"
   });
+  game.settings.register(MODULE_ID, "keepCoreHotbar", {
+    name: "PFM.Settings.KeepCoreHotbar.Name",
+    hint: "PFM.Settings.KeepCoreHotbar.Hint",
+    scope: "client", // Per user, like Crucible Tongs' own "Enable Actor on Hotbar" setting.
+    config: true,
+    type: Boolean,
+    default: false, // Tongs' Macro tab holds the same 50 macro slots, so hiding the duplicate is the default.
+    onChange: () => applyCoreHotbarVisibility()
+  });
 
   // P opens the party sheet, for players and the GM. Keybindings must be registered during init.
   // Foundry does not run keybindings while the user types in a text field, so chat is not affected.
@@ -158,6 +167,19 @@ async function chooseAndOpenCharacter() {
   if (picked) await showSheet(actors.get(picked));
   return { mode: "pick", uuid: picked ?? undefined };
 }
+
+// Crucible Tongs replaces Foundry's hotbar: its HotBarActor sets ui.hotbar.element.hidden at the end of
+// every render. ApplicationV2 fires the renderHotBarActor hook after that, so un-hiding here keeps both.
+const TONGS_HOTBAR_ID = "actor-hud";
+
+function applyCoreHotbarVisibility() {
+  const element = ui.hotbar?.element;
+  if (!element) return;
+  const tongsShowsActor = !!foundry.applications.instances.get(TONGS_HOTBAR_ID)?.actor;
+  element.hidden = tongsShowsActor && !game.settings.get(MODULE_ID, "keepCoreHotbar");
+}
+
+Hooks.on("renderHotBarActor", () => applyCoreHotbarVisibility());
 
 // Chat interaction: typing "/hello" posts the greeting instead of the raw text.
 // v14 rejects unknown slash commands unless they are in ChatLog.CHAT_COMMANDS, so register there.

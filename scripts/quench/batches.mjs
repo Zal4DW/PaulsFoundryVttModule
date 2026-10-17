@@ -161,9 +161,16 @@ export function registerQuenchBatches(quench, moduleId) {
         });
 
         it("opens the assigned character when it is the only candidate", async function () {
-          // Other owned characters or selected tokens in the world would make this a picker instead.
+          // Other owned characters or selected tokens in the world make this a picker instead. The picker waits
+          // for a click, so close it as soon as it renders. openCharacter then resolves with nothing picked.
           await game.user.update({ character: temp.id });
-          const result = await game.modules.get(moduleId).api.openCharacter();
+          const closePicker = Hooks.on("renderDialogV2", (dialog) => dialog.close());
+          let result;
+          try {
+            result = await game.modules.get(moduleId).api.openCharacter();
+          } finally {
+            Hooks.off("renderDialogV2", closePicker);
+          }
           if (result.mode === "pick") this.skip();
           assert.equal(result.mode, "open");
           assert.equal(result.uuid, temp.uuid);
@@ -172,5 +179,52 @@ export function registerQuenchBatches(quench, moduleId) {
       });
     },
     { displayName: "Paul's Foundry Module: character" }
+  );
+
+  quench.registerBatch(
+    `${moduleId}.hotbar`,
+    (context) => {
+      const { describe, it, assert, before, after } = context;
+      let original = true;
+      const tongsBar = () => foundry.applications.instances.get("actor-hud");
+      const rerender = async () => {
+        await tongsBar().render({ force: true });
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      };
+
+      describe("Keep Foundry's hotbar with Crucible Tongs", function () {
+        this.timeout(10_000);
+
+        before(() => {
+          original = game.settings.get(moduleId, "keepCoreHotbar");
+        });
+
+        after(async () => {
+          await game.settings.set(moduleId, "keepCoreHotbar", original);
+          if (tongsBar()?.actor) await rerender();
+        });
+
+        it("registers a per-user setting, off by default", () => {
+          const setting = game.settings.settings.get(`${moduleId}.keepCoreHotbar`);
+          assert.exists(setting);
+          assert.equal(setting.scope, "client");
+          assert.isFalse(setting.default, "Tongs replaces the hotbar by default");
+        });
+
+        it("keeps Foundry's hotbar visible when on, and lets Tongs hide it when off", async function () {
+          // Needs Crucible Tongs active with its hotbar showing an actor (an assigned character or a selected token).
+          if (!game.modules.get("crucibletongs")?.active || !tongsBar()?.actor) this.skip();
+
+          await game.settings.set(moduleId, "keepCoreHotbar", true);
+          await rerender();
+          assert.isFalse(ui.hotbar.element.hidden, "Foundry's hotbar should stay visible");
+
+          await game.settings.set(moduleId, "keepCoreHotbar", false);
+          await rerender();
+          assert.isTrue(ui.hotbar.element.hidden, "Tongs should hide Foundry's hotbar");
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: hotbar" }
   );
 }

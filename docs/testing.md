@@ -80,6 +80,18 @@ You need Docker Desktop, Node 20.19+, 22.13+ or 24+ (the range ESLint 10 support
 
 The server starts the world named in `FOUNDRY_WORLD` in `compose.yaml` (`pfm-test`). To play `pfm-ember`, join `pfm-test` as Gamemaster, use Return to Setup in the Settings sidebar, and launch `pfm-ember`. The join page's own Return to Setup button needs an admin key, which this server does not have. Switch back before `npm run test:e2e`, or restart the container (`docker compose restart foundry`), which relaunches `pfm-test`.
 
+### Crucible Tongs patch
+
+Crucible Tongs 1.8.0 was written for an older Crucible. On Crucible 0.11.1 its hero hotbar, skill tooltips and token action ring fail with `reading 'SKILLS'` and `reading '0'` errors, and its skills tab tooltip shows the raw key `ACTOR.TABS.skills`. `tools/patch-crucible-tongs.mjs` fixes all three until the Tongs author ships a fix:
+
+```bash
+node tools/patch-crucible-tongs.mjs .foundry/data/Data
+```
+
+Point it at any Foundry `Data` folder, including your real game server's. It keeps a `.orig` copy of each file it changes, does nothing on a second run, and reports "Nothing to patch" on a Tongs version without the problem. A Tongs update replaces the files, so run it again after updating, then reload Foundry. This dev server's copy is already patched.
+
+Tongs replaces Foundry's macro hotbar while it shows a character, and its Macro tab holds the same 50 macro slots. To see both bars, turn on "Keep Foundry's Hotbar with Crucible Tongs" in this module's settings. It is a per-user setting and is off by default.
+
 ## Daily loop
 
 1. Edit files in `scripts/`, `styles/` or `lang/`. Docker bind-mounts them into the module folder, so press F5 in the browser to load the change. Restart the server only after a `module.json` change.
