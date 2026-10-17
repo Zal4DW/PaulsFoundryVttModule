@@ -20,7 +20,7 @@ export function leaderboards(heroes) {
     { id: "support", label: "Cheerleader", hint: "Most buffs and inspiring actions", value: (s) => s.buffs, show: (v) => `${v} buffs` },
     { id: "mover", label: "Road Runner", hint: "Most feet moved", value: (s) => s.feetMoved, show: (v, s) => `${v} ft${s.feetEstimated ? " (est.)" : ""}` },
     { id: "speed", label: "First Off the Line", hint: "Best average turn position", value: (s) => (s.avgPosition === null ? null : -s.avgPosition), show: (v) => `#${num(-v, 1)} avg` },
-    { id: "lucky", label: "Hot Dice", hint: "Highest average die face", value: (s) => (s.dice.count >= 3 ? s.avgDie : null), show: (v) => `${num(v, 2)} avg die` },
+    { id: "lucky", label: "Hot Dice", hint: "Luckiest rolls for the size of each die (50% is average)", value: (s) => (s.dice.count >= 3 ? s.luck : null), show: (v) => `${pct(v)} luck` },
     { id: "unlucky", label: "Snake Eyes", hint: "Most natural 1s rolled", value: (s) => s.ones, show: (v) => `${v} × 1s` }
   ];
   const out = [];
@@ -44,11 +44,16 @@ export function rankOf(heroes, key, value) {
   return i === -1 ? null : { rank: i + 1, of: vals.length };
 }
 
-/** Die-face histogram rows (1 to 8) with a bar width as a percentage of the most common face. */
-export function diceBars(dice, faces = 8) {
-  const counts = Array.from({ length: faces }, (_, i) => dice?.faces?.[i + 1] ?? 0);
-  const max = Math.max(1, ...counts);
-  return counts.map((n, i) => ({ face: i + 1, count: n, width: Math.round((n / max) * 100) }));
+/**
+ * One face histogram per die size rolled, smallest die first. Boons and banes change die sizes,
+ * so faces from different sizes are never mixed. Bar widths are a percentage of that die's most common face.
+ */
+export function diceBars(dice) {
+  return Object.entries(dice?.sizes ?? {}).map(([size, b]) => {
+    const counts = Array.from({ length: Number(size) }, (_, i) => b.faces[i + 1] ?? 0);
+    const max = Math.max(1, ...counts);
+    return { size: Number(size), count: b.count, bars: counts.map((n, i) => ({ face: i + 1, count: n, width: Math.round((n / max) * 100) })) };
+  }).sort((a, b) => a.size - b.size);
 }
 
 /** Escape text for safe use in HTML. */

@@ -60,7 +60,7 @@
   "PFM.Stats.Attunement": "attunement",
   "PFM.Stats.None": "None",
   "PFM.Stats.Luck": "Dice luck",
-  "PFM.Stats.LuckLine": "Average die {avg}. Natural 1s: {ones}. Average margin over the DC: {margin}.",
+  "PFM.Stats.LuckLine": "Luck {luck} (50% is average for the dice rolled). Natural 1s: {ones}. Top faces: {maxes}. Average margin over the DC: {margin}.",
   "PFM.Stats.MissedBecause": "Your misses, by defence",
   "PFM.Stats.SkillChecks": "Skill checks (passed / rolled)",
   "PFM.Stats.FateKilled": "Defeated by {by} in round {round}.",
@@ -99,5 +99,6 @@
   "PFM.Stats.Hint.Checks": "Skill checks passed / rolled",
   "PFM.Stats.Col.Ones": "1s",
   "PFM.Stats.Hint.Ones": "Natural 1s rolled",
-  "PFM.Stats.Import.Done": "Imported {name}."
+  "PFM.Stats.Import.Done": "Imported {name}.",
+  "PFM.Stats.BoonLine": "Boons {boons} on {withBoons} rolls. Banes {banes} on {withBanes} rolls. Each boon steps a die up to d10 or d12, each bane down to d6 or d4."
 }

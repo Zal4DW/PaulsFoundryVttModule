@@ -38,6 +38,12 @@ Open it with `/stats` in chat, or from a macro with `game.modules.get("pauls-fou
 | Assist | Damage on a target that someone else killed. |
 | Avg pos | Average place in the round's initiative order. 1 is first. |
 | Heroism | Gained / spent. The bracketed value was lost when combat ended. |
+| Luck | Each die scored from 0% (a 1) to 100% (its top face), then averaged. 50% is average on any die size. |
+| Boons, banes | Totals across a hero's rolls, and how many rolls had any. |
+
+## Dice sizes
+
+Crucible rolls three dice, d8 by default. Each boon steps one die up (d10, then d12). Each bane steps one down (d6, then d4). The recorder stores each die as `[size, result]`, and the dashboard draws one histogram per size. A raw average of faces would be wrong here: a 3 on a d4 is a better roll than a 4 on a d12. Records saved before sizes were tracked hold bare numbers, and the dashboard reads those as d8s.
 
 ## MVP score
 

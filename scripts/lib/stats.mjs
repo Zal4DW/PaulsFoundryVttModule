@@ -13,11 +13,17 @@ const CRIT = 6;
 
 const parseRoll = (r) => (typeof r === "string" ? JSON.parse(r) : r);
 
-/** The d8 (or other die) faces rolled, in order. */
+/**
+ * The dice rolled, in order, as [size, result] pairs. Crucible rolls three dice, d8 by default.
+ * Each boon steps one die up (d10, d12) and each bane steps one down (d6, d4), so the size matters.
+ */
 export function diceFaces(roll) {
   const r = parseRoll(roll);
-  return (r?.terms ?? []).filter((t) => t.class === "Die").flatMap((t) => (t.results ?? []).filter((x) => x.active !== false).map((x) => x.result));
+  return (r?.terms ?? []).filter((t) => t.class === "Die").flatMap((t) => (t.results ?? []).filter((x) => x.active !== false).map((x) => [t.faces, x.result]));
 }
+
+/** How good a result is for its die: 0 for a 1, 1 for the top face. Expected value is 0.5 on any die. */
+export const dieLuck = (size, result) => (size > 1 ? (result - 1) / (size - 1) : 0.5);
 
 /** Crucible check outcome: success needs total > DC, crit success total > DC + 6, crit failure total <= DC - 6. */
 export function checkOutcome(total, dc, { critSuccess = CRIT, critFailure = CRIT } = {}) {
@@ -77,7 +83,7 @@ export function extractRecords(messages, { meta = {}, rounds = {}, moveFeet = {}
       rows.forEach((combatantId, i) => {
         const key = Object.values(meta).find((x) => x.combatantId === combatantId)?.key ?? `combatant:${combatantId}`;
         const roll = rolls[i];
-        records.push({ ...base, kind: "initiative", round, turn: null, actor: key, total: roll?.total ?? null, dice: roll ? diceFaces(roll) : [], position: i + 1, of: rows.length });
+        records.push({ ...base, kind: "initiative", round, turn: null, actor: key, total: roll?.total ?? null, dice: roll ? diceFaces(roll) : [], boons: roll?.data?.totalBoons ?? roll?.data?.boons ?? 0, banes: roll?.data?.totalBanes ?? roll?.data?.banes ?? 0, position: i + 1, of: rows.length });
         (positions[round] ??= {})[key] = i + 1;
       });
       initRound = round + 1;
@@ -182,10 +188,29 @@ const blank = () => ({
   apSpent: 0, feetMoved: 0, feetEstimated: false, moves: 0,
   initiativeTotal: 0, initiativeRolls: 0, positionTotal: 0,
   checks: 0, checkSuccesses: 0, checkCrits: 0, checkFumbles: 0, checksBySkill: {},
-  dice: { count: 0, sum: 0, faces: {} }, marginTotal: 0, marginCount: 0
+  dice: blankDice(), boons: 0, banes: 0, rollsWithBoons: 0, rollsWithBanes: 0, marginTotal: 0, marginCount: 0
 });
 
-const addDice = (s, faces) => { for (const f of faces) { s.dice.count++; s.dice.sum += f; s.dice.faces[f] = (s.dice.faces[f] ?? 0) + 1; } };
+function blankDice() { return { count: 0, luckSum: 0, ones: 0, maxes: 0, sizes: {} }; }
+
+/** Add one die to a dice tally. Older records stored bare d8 results, so a number counts as a d8. */
+function tallyDie(dice, die, n = 1) {
+  const [size, result] = Array.isArray(die) ? die : [8, die];
+  dice.count += n; dice.luckSum += dieLuck(size, result) * n;
+  if (result === 1) dice.ones += n;
+  if (result === size) dice.maxes += n;
+  const b = (dice.sizes[size] ??= { count: 0, faces: {} });
+  b.count += n; b.faces[result] = (b.faces[result] ?? 0) + n;
+}
+
+/** Tally a roll's dice, and its boons and banes. */
+const addDice = (s, dice, roll = {}) => {
+  for (const d of dice ?? []) tallyDie(s.dice, d);
+  if (!dice?.length) return;
+  s.boons += roll.boons ?? 0; s.banes += roll.banes ?? 0;
+  if (roll.boons > 0) s.rollsWithBoons++;
+  if (roll.banes > 0) s.rollsWithBanes++;
+};
 const isHealingAction = (r) => r.tags.includes("healing") || /heal|bloom|mend|restor/i.test(r.actionId);
 
 /**
@@ -203,9 +228,9 @@ export function aggregate(records, meta = {}) {
   const turnsSeen = new Set();
 
   for (const r of records) {
-    if (r.kind === "initiative") { const s = S(r.actor); s.initiativeTotal += r.total ?? 0; s.initiativeRolls++; s.positionTotal += r.position; addDice(s, r.dice); continue; }
+    if (r.kind === "initiative") { const s = S(r.actor); s.initiativeTotal += r.total ?? 0; s.initiativeRolls++; s.positionTotal += r.position; addDice(s, r.dice, r); continue; }
     if (r.kind === "check") {
-      const s = S(r.actor); s.checks++; addDice(s, r.dice);
+      const s = S(r.actor); s.checks++; addDice(s, r.dice, r);
       if (r.success) s.checkSuccesses++; if (r.critSuccess) s.checkCrits++; if (r.critFailure) s.checkFumbles++;
       if (r.dc !== null) { s.marginTotal += r.total - r.dc; s.marginCount++; }
       const b = (s.checksBySkill[r.skill] ??= { checks: 0, successes: 0 }); b.checks++; if (r.success) b.successes++;
@@ -231,7 +256,7 @@ export function aggregate(records, meta = {}) {
     for (const a of r.attacks) {
       const t = S(a.target);
       s.attacks++; t.attacksReceived++;
-      addDice(s, a.dice);
+      addDice(s, a.dice, a);
       if (a.dc !== null && a.total !== null) { s.marginTotal += a.total - a.dc; s.marginCount++; }
       if (a.critSuccess) s.crits++; if (a.critFailure) s.fumbles++;
       const dmg = Math.max(0, a.health) + Math.max(0, a.wounds);
@@ -283,8 +308,8 @@ export function aggregate(records, meta = {}) {
     s.checkSuccessRate = s.checks ? s.checkSuccesses / s.checks : null;
     s.avgInitiative = s.initiativeRolls ? s.initiativeTotal / s.initiativeRolls : null;
     s.avgPosition = s.initiativeRolls ? s.positionTotal / s.initiativeRolls : null;
-    s.avgDie = s.dice.count ? s.dice.sum / s.dice.count : null;
-    s.ones = s.dice.faces[1] ?? 0;
+    s.luck = s.dice.count ? s.dice.luckSum / s.dice.count : null;
+    s.ones = s.dice.ones;
     s.avgMargin = s.marginCount ? s.marginTotal / s.marginCount : null;
     s.mvp = mvpScore(s);
   }
@@ -308,7 +333,7 @@ export function mvpScore(s) {
   return s.damageDealt + s.moraleDamageDealt + s.woundsDealt * 3 + s.killsSolo * 10 + s.killsEarned * 8 + s.killsStolen * 4 + s.assists * 3 + s.healingDone + s.buffs * 3 - s.deaths * 10;
 }
 
-const SUM_FIELDS = ["initiativeTotal", "initiativeRolls", "positionTotal", "marginTotal", "marginCount", "turns", "actions", "attacks", "hits", "glances", "misses", "crits", "fumbles", "damageDealt", "moraleDamageDealt", "woundsDealt", "attacksReceived", "avoided", "damageTaken", "moraleDamageTaken", "woundsTaken", "kills", "killsEarned", "killsStolen", "killsSolo", "assists", "deaths", "healingDone", "healingReceived", "buffs", "spellsCast", "focusSpent", "focusRestored", "refocuses", "heroismSpent", "heroismGained", "heroismLostAtEnd", "milestones", "levelsGained", "attunementPoints", "attunementRanks", "apSpent", "feetMoved", "moves", "checks", "checkSuccesses", "checkCrits", "checkFumbles"];
+const SUM_FIELDS = ["initiativeTotal", "initiativeRolls", "positionTotal", "marginTotal", "marginCount", "turns", "actions", "attacks", "hits", "glances", "misses", "crits", "fumbles", "damageDealt", "moraleDamageDealt", "woundsDealt", "attacksReceived", "avoided", "damageTaken", "moraleDamageTaken", "woundsTaken", "kills", "killsEarned", "killsStolen", "killsSolo", "assists", "deaths", "healingDone", "healingReceived", "buffs", "spellsCast", "focusSpent", "focusRestored", "refocuses", "heroismSpent", "heroismGained", "heroismLostAtEnd", "milestones", "levelsGained", "attunementPoints", "attunementRanks", "apSpent", "feetMoved", "moves", "checks", "checkSuccesses", "checkCrits", "checkFumbles", "boons", "banes", "rollsWithBoons", "rollsWithBanes"];
 
 /** Sum a set of combatant stats into one row (used for the party and for minion adversaries). */
 export function rollUp(rows, name) {
@@ -320,9 +345,11 @@ export function rollUp(rows, name) {
   out.avgInitiative = out.initiativeRolls ? out.initiativeTotal / out.initiativeRolls : null;
   out.avgPosition = out.initiativeRolls ? out.positionTotal / out.initiativeRolls : null;
   out.avgMargin = out.marginCount ? out.marginTotal / out.marginCount : null;
-  const faces = {}; let count = 0, sum = 0;
-  for (const s of rows) for (const [f, n] of Object.entries(s.dice?.faces ?? {})) { faces[f] = (faces[f] ?? 0) + n; count += n; sum += Number(f) * n; }
-  out.dice = { count, sum, faces }; out.avgDie = count ? sum / count : null; out.ones = faces[1] ?? 0;
+  out.dice = blankDice();
+  for (const s of rows) {
+    for (const [size, b] of Object.entries(s.dice?.sizes ?? {})) for (const [f, n] of Object.entries(b.faces)) tallyDie(out.dice, [Number(size), Number(f)], n);
+  }
+  out.luck = out.dice.count ? out.dice.luckSum / out.dice.count : null; out.ones = out.dice.ones;
   out.feetEstimated = rows.some((s) => s.feetEstimated);
   const avoidedBy = {};
   for (const s of rows) for (const [k, v] of Object.entries(s.avoidedBy ?? {})) avoidedBy[k] = (avoidedBy[k] ?? 0) + v;

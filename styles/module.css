@@ -43,3 +43,7 @@
 .pfm-stats .pfm-major h4 { margin: 0.5rem 0 0; }
 .pfm-stats .pfm-plays { margin: 0; padding-left: 1.5rem; font-size: 0.85rem; }
 .pfm-stats .pfm-plays li.kill { font-weight: bold; color: var(--color-warm-1, #ff6400); }
+.pfm-stats .pfm-diesets { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.5rem; }
+.pfm-stats .pfm-dieset h4 { margin: 0.25rem 0; font-size: 0.85rem; }
+.pfm-stats .pfm-diebar.d4, .pfm-stats .pfm-diebar.d6 { background: #8a4a4a; }
+.pfm-stats .pfm-diebar.d10, .pfm-stats .pfm-diebar.d12 { background: #4a8a5a; }

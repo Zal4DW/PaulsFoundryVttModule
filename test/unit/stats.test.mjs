@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { aggregate, checkOutcome, diceFaces, estimateMoves, extractRecords, actorKey, fightFromExport } from "../../scripts/lib/stats.mjs";
+import { aggregate, checkOutcome, diceFaces, dieLuck, estimateMoves, extractRecords, actorKey, fightFromExport } from "../../scripts/lib/stats.mjs";
 import { contextFromFixture, loadFixture } from "./fixture-context.mjs";
 
 describe("checkOutcome (Crucible rules)", () => {
@@ -25,10 +25,18 @@ describe("checkOutcome (Crucible rules)", () => {
 });
 
 describe("helpers", () => {
-  it("reads die faces from a serialized roll", () => {
-    const roll = { terms: [{ class: "Die", results: [{ result: 7, active: true }] }, { class: "OperatorTerm" }, { class: "Die", results: [{ result: 1, active: true }] }, { class: "NumericTerm", number: 2 }] };
-    expect(diceFaces(roll)).toEqual([7, 1]);
-    expect(diceFaces(JSON.stringify(roll))).toEqual([7, 1]);
+  it("reads each die's size and result from a serialized roll", () => {
+    // A boon steps a d8 up to a d10. A bane steps one down to a d6.
+    const roll = { terms: [{ class: "Die", faces: 10, results: [{ result: 7, active: true }] }, { class: "OperatorTerm" }, { class: "Die", faces: 6, results: [{ result: 1, active: true }] }, { class: "NumericTerm", number: 2 }] };
+    expect(diceFaces(roll)).toEqual([[10, 7], [6, 1]]);
+    expect(diceFaces(JSON.stringify(roll))).toEqual([[10, 7], [6, 1]]);
+  });
+
+  it("scores luck against the die's own size", () => {
+    expect(dieLuck(4, 4)).toBe(1);
+    expect(dieLuck(12, 1)).toBe(0);
+    expect(dieLuck(8, 4.5)).toBe(0.5);
+    expect(dieLuck(12, 4)).toBeLessThan(dieLuck(4, 3)); // a 4 on a d12 is worse than a 3 on a d4
   });
 
   it("keys unlinked token actors by token id and linked actors through the metadata", () => {
@@ -111,6 +119,20 @@ describe("Day One: The Feral Scramble (fixture)", () => {
     expect(medicine.filter((r) => r.critFailure).map((r) => ctx.meta[r.actor].name).sort()).toEqual(["Eliorwen", "Kagura"]);
   });
 
+  it("keeps boon and bane dice at their own size", () => {
+    const sizes = (s) => Object.keys(s.dice.sizes).map(Number).sort((a, b) => a - b);
+    const all = new Set(Object.values(stats.combatants).flatMap(sizes));
+    expect([...all].sort((a, b) => a - b)).toEqual([4, 6, 8, 10, 12]);
+    for (const s of Object.values(stats.combatants)) {
+      for (const [size, b] of Object.entries(s.dice.sizes)) expect(Math.max(...Object.keys(b.faces).map(Number))).toBeLessThanOrEqual(Number(size));
+    }
+    const party = stats.party;
+    expect(party.boons).toBeGreaterThan(0);
+    expect(party.rollsWithBoons).toBeGreaterThan(0);
+    expect(party.luck).toBeGreaterThan(0);
+    expect(party.luck).toBeLessThan(1);
+  });
+
   it("tracks Focus spent and buffs from Inspire Heroism", () => {
     expect(byName("Duurath").focusSpent).toBe(1);
     expect(byName("Duurath").buffs).toBeGreaterThanOrEqual(1);
@@ -144,6 +166,14 @@ describe("fightFromExport", () => {
     const stats = aggregate(fight.records, fight.meta);
     expect(stats.party.heroismLostAtEnd).toBe(4);
     expect(stats.kills).toHaveLength(8);
+  });
+
+  it("still reads older records that stored bare d8 results", () => {
+    const meta = { H: { key: "H", name: "Hero", type: "hero" } };
+    const s = aggregate([{ kind: "initiative", actor: "H", total: 10, dice: [8, 1, 4], position: 1, round: 1 }], meta).combatants.H;
+    expect(s.dice.sizes[8].count).toBe(3);
+    expect(s.ones).toBe(1);
+    expect(s.dice.maxes).toBe(1);
   });
 });
 

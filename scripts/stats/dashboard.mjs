@@ -125,8 +125,8 @@ export class StatsDashboard extends ApplicationV2 {
     </div>`;
     const avoided = Object.entries(s.avoidedBy).map(([k, v]) => `<li>${esc(k)}: ${v}</li>`).join("") || `<li>${esc(L("None"))}</li>`;
     const skills = Object.entries(s.checksBySkill).map(([k, v]) => `<li>${esc(k)}: ${v.successes}/${v.checks}</li>`).join("") || `<li>${esc(L("None"))}</li>`;
-    const dice = diceBars(s.dice).map((b) => `<div class="pfm-die"><span>${b.face}</span><div class="pfm-diebar" style="width:${b.width}%"></div><em>${b.count}</em></div>`).join("");
-    const luck = `<div class="pfm-luck"><h3>${esc(L("Luck"))}</h3><p>${esc(L("LuckLine", { avg: num(s.avgDie, 2), ones: s.ones, margin: num(s.avgMargin, 1) }))}</p>${dice}</div>`;
+    const dice = diceBars(s.dice).map((d) => `<div class="pfm-dieset"><h4>d${d.size} <small>× ${d.count}</small></h4>${d.bars.map((b) => `<div class="pfm-die"><span>${b.face}</span><div class="pfm-diebar d${d.size}" style="width:${b.width}%"></div><em>${b.count}</em></div>`).join("")}</div>`).join("");
+    const luck = `<div class="pfm-luck"><h3>${esc(L("Luck"))}</h3><p>${esc(L("LuckLine", { luck: pct(s.luck), ones: s.ones, maxes: s.dice.maxes, margin: num(s.avgMargin, 1) }))}</p><p>${esc(L("BoonLine", { boons: s.boons, banes: s.banes, withBoons: s.rollsWithBoons, withBanes: s.rollsWithBanes }))}</p><div class="pfm-diesets">${dice}</div></div>`;
     return `${pick}${tiles}<div class="pfm-cols"><div><h3>${esc(L("MissedBecause"))}</h3><ul>${avoided}</ul><h3>${esc(L("SkillChecks"))}</h3><ul>${skills}</ul></div>${luck}</div>`;
   }
 
