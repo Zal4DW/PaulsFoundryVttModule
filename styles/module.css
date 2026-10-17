@@ -1,0 +1,4 @@
+.pfm-message {
+  border-left: 3px solid var(--color-border-highlight, #ff6400);
+  padding-left: 0.5em;
+}

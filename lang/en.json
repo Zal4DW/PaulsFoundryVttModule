@@ -1,0 +1,8 @@
+{
+  "PFM.Settings.Enabled.Name": "Enable Hello Chat",
+  "PFM.Settings.Enabled.Hint": "Respond to the /hello chat command and show a greeting when the world is ready.",
+  "PFM.Settings.Greeting.Name": "Greeting",
+  "PFM.Settings.Greeting.Hint": "Text used in the hello message.",
+  "PFM.Settings.Greeting.Default": "Hello from Paul's Foundry Module!",
+  "PFM.Ready": "Paul's Foundry Module is ready."
+}
