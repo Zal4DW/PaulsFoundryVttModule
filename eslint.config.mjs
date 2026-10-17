@@ -23,7 +23,7 @@ export default [
     languageOptions: { globals: { ...globals.browser, ...foundryGlobals } }
   },
   {
-    files: ["test/**/*.mjs", "*.config.mjs"],
+    files: ["test/**/*.mjs", "tools/**/*.mjs", "*.config.mjs"],
     languageOptions: { globals: { ...globals.node } }
   },
   {

@@ -41,13 +41,20 @@ export function registerQuenchBatches(quench, moduleId) {
         });
 
         it("posts the greeting and not the raw text", async () => {
-          const posted = new Promise((resolve) => Hooks.once("createChatMessage", resolve));
-          const raw = await ui.chat.processMessage(typed);
-          const message = await posted;
-          created.push(message.id);
-          if (raw) created.push(raw.id);
-          assert.isUndefined(raw, "ChatLog posted the raw /hello text");
-          assert.include(message.content, 'class="pfm-message"');
+          // With the setting off, the command posts nothing, and waiting for a message would hang.
+          const wasEnabled = game.settings.get(moduleId, "enabled");
+          if (!wasEnabled) await game.settings.set(moduleId, "enabled", true);
+          try {
+            const posted = new Promise((resolve) => Hooks.once("createChatMessage", resolve));
+            const raw = await ui.chat.processMessage(typed);
+            const message = await posted;
+            created.push(message.id);
+            if (raw) created.push(raw.id);
+            assert.isUndefined(raw, "ChatLog posted the raw /hello text");
+            assert.include(message.content, 'class="pfm-message"');
+          } finally {
+            if (!wasEnabled) await game.settings.set(moduleId, "enabled", false);
+          }
         });
       });
 

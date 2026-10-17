@@ -15,7 +15,7 @@ Keep logic that does not need `game` in `scripts/lib/`. That code takes no Found
 
 ## One-time setup
 
-You need Docker Desktop, Node 20 or later, and a Foundry VTT license.
+You need Docker Desktop, Node 20.19+, 22.13+ or 24+ (the range ESLint 10 supports), and a Foundry VTT license.
 
 1. Install the dev packages and the Playwright browser:
 
