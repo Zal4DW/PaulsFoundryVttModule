@@ -38,8 +38,13 @@ export function updateLog(moduleId, mutate) {
   if (!game.user.isGM) return;
   pending ??= foundry.utils.deepClone(saving ?? readLog(moduleId));
   mutate(pending);
+  schedule(moduleId, 750);
+}
+
+/** Save after a delay. A failed timed save is reported here, because nothing else awaits it. */
+function schedule(moduleId, delay) {
   clearTimeout(timer);
-  timer = setTimeout(() => flushLog(moduleId), 750);
+  timer = setTimeout(() => flushLog(moduleId).catch((err) => console.error(`${moduleId} | stats save failed`, err)), delay);
 }
 
 /** Save now, without waiting for the batch timer (used before combat data disappears). */
@@ -51,6 +56,14 @@ export async function flushLog(moduleId) {
   saving = log;
   try {
     await game.settings.set(moduleId, STATS_SETTING, log);
+  } catch (err) {
+    // Keep the records. A batch started during this save was cloned from `log` and already holds them;
+    // otherwise put this batch back and try again shortly.
+    if (!pending) {
+      pending = log;
+      schedule(moduleId, 5000);
+    }
+    throw err;
   } finally {
     if (saving === log) saving = null; // The cache now holds this log, unless a newer save started.
   }
