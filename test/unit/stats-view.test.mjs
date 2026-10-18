@@ -41,6 +41,14 @@ describe("leaderboards and ranks on Day One", () => {
     expect(award("healer")).toBeUndefined(); // no healing on Day One
   });
 
+  it("names the most wounded hero, with how often they went down", () => {
+    const heroes = [
+      { key: "V", name: "Vex", woundsTaken: 20, conditions: { weakened: 2 } },
+      { key: "B", name: "Brannoc", woundsTaken: 0, conditions: {} }
+    ].map((h) => ({ damageTaken: 0, damageDealt: 0, woundsDealt: 0, killsSolo: 0, killsEarned: 0, killsStolen: 0, assists: 0, attacks: 0, healingDone: 0, buffs: 0, feetMoved: 0, avgPosition: null, combatRolls: { count: 0, critFailures: 0 }, checkRolls: { successes: 0, failures: 0 }, ...h }));
+    expect(leaderboards(heroes).find((b) => b.id === "wounded")).toMatchObject({ name: "Vex", value: "20 wounds · down ×2" });
+  });
+
   it("ranks a hero against the party", () => {
     const agnath = stats.heroes.find((s) => s.name === "Agnath");
     expect(rankOf(stats.heroes, agnath.key, (s) => s.damageTaken)).toEqual({ rank: 1, of: 4 });

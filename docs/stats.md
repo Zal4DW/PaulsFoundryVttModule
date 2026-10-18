@@ -11,15 +11,18 @@ Open it with `/stats` in chat, or from a macro with `game.modules.get("pauls-fou
 - Each started combat is one fight, keyed by the combat id. Cards posted outside combat go into a `session-YYYY-MM-DD` fight.
 - The recorder reads these cards and changes:
   - Crucible action cards: attacks, damage, wounds, healing, buffs, AP, Focus and Heroism spent, movement.
-  - Group checks and requested skill checks.
+  - Group checks, requested skill checks and skill checks a hero rolls from their sheet.
+  - Ember's attunement award card ("Attunement Progression"). Ember changes the actor flag in place before saving, so an actor update cannot show the gain.
   - The "Initiative - Round N" report, for initiative totals and turn order.
-  - Actor updates: Heroism gained (Crucible awards it without a card), milestones, level-ups and Ember attunement points.
+  - Actor updates: Heroism gained (Crucible awards it without a card), milestones and level-ups.
   - Combat deletion: Heroism each hero still held, because ending combat clears it.
+  - Hazard cards (Caustic Slime, a rockfall). They have no actor, so the damage is credited to the hazard by name, as a `hazard:<name>` key. A hazard is neither a hero nor an adversary, and it never affects a fight's result.
 - Move distance comes from the token's movement history, read when the move card is posted. Foundry clears that history at turn change, so the recorder must be running at the time. Imported fights estimate distance from move origins instead, and the dashboard marks those values with `*`.
 
 ## Views
 
-- **Party.** Scoreboard, MVP, leaderboards, a stat table per hero with party and adversary totals, and the kill log.
+- **Party.** Scoreboard, MVP, leaderboards, a stat table per hero with party and adversary totals, a skill check table, and the kill log.
+- **Out of combat.** Pick an "Out of combat" entry to see that session alone. It shows party check totals, a table per hero with each skill's passed / rolled, attunement awards, the hazards that hit the party, and the conditions heroes picked up. It has no result and no Adversaries tab.
 - **My Hero.** One hero's stats with their rank in the party, misses by defence, skill checks, roll totals and progression. A player sees their assigned character first.
 - **Adversaries.** A grid of cards. Each major adversary (marked important, or ranked boss or elite) gets a card with its rank, fate, end-of-fight health and wounds bars, and eight stats. A red left edge means it was defeated; gold means it survived. Ordinary adversaries share one rolled-up card.
 - **Kill log** (on the Party view). Kills in round order. "Killed" means only the killer damaged the target, "finished" means the killer did the most damage, and "stole the kill on" means someone else did more. ★ marks a major adversary. The bar under each kill shows everyone's share of the damage, with the finishing blow in orange. A legend under the heading repeats this.
@@ -33,8 +36,8 @@ Pick "To date (all fights)" at the top of the fight list to see every recorded f
 - The party table gains three columns. **Status** is the hero now: Dead or Insane from the actor, else Active if they are on the party sheet, else Benched. **Fights** counts the combats they took part in. **W–L** is fights won and lost, with undecided or withdrawn fights in brackets.
 - Major adversaries merge by name across fights. Other adversaries are rolled up into one row.
 - The kill log names the fight each kill came from.
-- The Roll of Valour tab lists every fight with its date, result, rounds, MVP and heroes. Click a fight to open it.
-- The out-of-combat bucket for a session (checks rolled outside combat) counts toward a hero's totals but not as a fight.
+- The Roll of Valour tab lists every fight with its date, result, rounds, MVP and heroes, and every out-of-combat session with its checks. Click one to open it.
+- The out-of-combat bucket for a session (checks rolled outside combat) counts toward a hero's totals but not as a fight. The banner and the skill check table include its checks.
 - Play-by-Play is hidden here. Open a single fight for it.
 
 The engine is `aggregateToDate` in `scripts/lib/stats.mjs`.
@@ -97,7 +100,7 @@ The path is relative to Foundry's Data folder. Importing again with the same id 
 - **Major adversaries** are those marked important, or ranked boss or elite. They are listed on their own; the rest are rolled up.
 - **Fight result.** When combat ends, the result is worked out from who is left: Defeat when every hero is dead or insane, Victory when every major adversary (or, with none, every adversary) is down, otherwise Undecided. A GM can set it instead with `api.setFightOutcome(fightId, "victory" | "defeat" | "withdrawn", note)`.
 - **End state.** Each combatant's health, wounds, morale, madness and conditions are kept from the end of the fight, so fates read in full: "Victorious: fought on at 0 health with 63 of 105 wounds, 3 kills".
-- **Conditions.** Broken, insane, dead, weakened, frightened and similar conditions are logged as they start, with the round.
+- **Conditions.** Broken, insane, dead, weakened, frightened, blinded, deafened, disoriented, exposed and similar conditions are logged as they start, with the round. Outside combat, a hero's conditions go into the session bucket, with no round.
 - **Notes.** `api.addFightNote(fightId, actorName, text)` records what the cards do not show, such as a ritual or a ruling.
 - **Roll of Valour.** When combat ends, a page for the fight is written to the "Roll of Valour" journal, which players can read. Rename it with the Fight Journal Name setting. `api.writeFightJournal(fightId)` rewrites a page.
 - **Rebuilding.** `api.rebuildFight(fightId)` re-extracts a fight's records from its chat cards after the stats engine changes.

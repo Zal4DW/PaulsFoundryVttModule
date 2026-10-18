@@ -1,11 +1,12 @@
 // GM-side recorder: turns chat cards into stats records as they happen, and stores them for every user to read.
 // Runs only on the active GM's client, so records are written once.
-import { aggregate, estimateMoves, extractRecords } from "../lib/stats.mjs";
+import { aggregate, estimateMoves, extractRecords, isHazardKey } from "../lib/stats.mjs";
 import { fightReport } from "../lib/stats-view.mjs";
 import { flushLog, readLog, updateLog } from "./store.mjs";
 
 /** Conditions worth a line in the stats: what a hero or adversary suffered, not every short buff. */
-export const TRACKED_CONDITIONS = ["dead", "insane", "broken", "weakened", "frightened", "enraged", "restrained", "prone", "slowed", "staggered", "incapacitated"];
+export const TRACKED_CONDITIONS = ["dead", "insane", "broken", "weakened", "frightened", "enraged", "restrained", "prone", "slowed", "staggered", "incapacitated",
+  "blinded", "deafened", "disoriented", "exposed", "confused", "diseased", "bleeding", "burning"];
 
 const isRecorder = () => game.user.isGM && game.users.activeGM?.id === game.user.id;
 
@@ -91,7 +92,7 @@ function feetForMovement(message) {
 /** Turn one chat message into records and store them, replacing earlier records from the same message. */
 function recordMessage(moduleId, message) {
   const crucible = message.flags?.crucible ?? {};
-  const relevant = crucible.action || crucible.groupCheck || crucible.isInitiativeReport;
+  const relevant = crucible.action || crucible.groupCheck || crucible.skill || crucible.isInitiativeReport || message.flags?.ember?.attunementAward;
   if (!relevant) return;
   const fightId = currentFightId();
   updateLog(moduleId, (log) => {
@@ -101,7 +102,8 @@ function recordMessage(moduleId, message) {
     const rounds = combat?.started && !(crucible.action?.tags ?? []).includes("noncombat") ? { [message.id]: { round: combat.round, turn: combat.turn } } : {};
     const records = extractRecords([message.toObject()], { meta: fight.meta, rounds, moveFeet: feetForMovement(message) });
     for (const r of records) for (const key of [r.actor, ...(r.attacks ?? []).map((a) => a.target), ...(r.effects ?? []).map((e) => e.target)]) {
-      if (key && !fight.meta[key]) fight.meta[key] = metaFor(key);
+      // Hazards get no metadata: they are not combatants, and fightOutcome would count a typed entry as a foe.
+      if (key && !isHazardKey(key) && !fight.meta[key]) fight.meta[key] = metaFor(key);
     }
     fight.records = fight.records.filter((r) => r.id !== message.id).concat(records);
   });
@@ -131,15 +133,17 @@ function recordProgress(moduleId, actor, kind, amount, level = null, extra = {})
   });
 }
 
-/** Record a tracked condition starting or ending on an actor during combat. */
+/** Record a tracked condition starting or ending on an actor: in the running combat, else in the session bucket. */
 function recordCondition(moduleId, actor, status, on) {
-  const combat = game.combat;
-  if (!combat?.started) return;
-  const key = keyForActor(actor, combat);
+  const combat = game.combat?.started ? game.combat : null;
+  // Outside combat only heroes count (a Kaleidoscope crystal's Blinded, say), not the GM's set dressing.
+  if (!combat && actor?.type !== "hero") return;
+  const key = combat ? keyForActor(actor, combat) : `actor:${actor.id}`;
+  const fightId = currentFightId();
   updateLog(moduleId, (log) => {
-    const fight = (log.fights[combat.id] ??= fightShell(combat.id));
+    const fight = (log.fights[fightId] ??= fightShell(fightId));
     fight.meta[key] ??= metaFor(key);
-    fight.records.push({ id: `condition-${foundry.utils.randomID()}`, ts: Date.now(), round: combat.round, turn: combat.turn, kind: "condition", actor: key, status, on });
+    fight.records.push({ id: `condition-${foundry.utils.randomID()}`, ts: Date.now(), round: combat?.round ?? null, turn: combat?.turn ?? null, kind: "condition", actor: key, status, on });
   });
 }
 
@@ -237,10 +241,8 @@ export function startRecorder(moduleId) {
     for (const [k, path] of Object.entries(WATCHED)) {
       if (foundry.utils.getProperty(change, path) !== undefined) (options.pfmBefore ??= {})[k] = foundry.utils.getProperty(actor, path) ?? 0;
     }
-    // Ember attunements: flags.ember.attunements[type] = {current, rank, awards}. GMs award points; ranks follow.
-    if (foundry.utils.getProperty(change, "flags.ember.attunements") !== undefined) {
-      (options.pfmBefore ??= {}).attunements = foundry.utils.deepClone(actor.getFlag("ember", "attunements") ?? {});
-    }
+    // Ember attunements are recorded from Ember's award chat card (see extractRecords), not from the actor flag:
+    // Ember changes flags.ember.attunements in place before it saves, so this hook never sees the old value.
   });
   Hooks.on("updateActor", (actor, change, options) => {
     if (!isRecorder() || !options.pfmBefore) return;
@@ -248,15 +250,6 @@ export function startRecorder(moduleId) {
     if (options.pfmBefore.heroism !== undefined && game.combat?.started && delta("heroism") > 0) recordHeroism(moduleId, actor, delta("heroism"), "gain");
     if (options.pfmBefore.milestones !== undefined && delta("milestones") > 0) recordProgress(moduleId, actor, "milestone", delta("milestones"));
     if (options.pfmBefore.level !== undefined && delta("level") > 0) recordProgress(moduleId, actor, "levelUp", delta("level"), foundry.utils.getProperty(actor, WATCHED.level));
-    if (options.pfmBefore.attunements) {
-      const now = actor.getFlag("ember", "attunements") ?? {};
-      for (const [type, p] of Object.entries(now)) {
-        const was = options.pfmBefore.attunements[type] ?? {};
-        const gained = (p?.current ?? 0) - (was.current ?? 0);
-        const ranks = (p?.rank ?? 0) - (was.rank ?? 0);
-        if (gained > 0 || ranks > 0) recordProgress(moduleId, actor, "attunement", Math.max(0, gained), null, { attunement: type, rank: p?.rank ?? null, ranksGained: Math.max(0, ranks) });
-      }
-    }
   });
 
   // Conditions come and go as Active Effects carrying status ids.

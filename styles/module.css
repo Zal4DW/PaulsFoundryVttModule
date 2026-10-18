@@ -47,6 +47,11 @@
 .pfm-stats .pfm-result-defeat { background: rgba(160, 50, 50, 0.4); }
 .pfm-stats .pfm-result-withdrawn, .pfm-stats .pfm-result-undecided { background: rgba(120, 120, 120, 0.3); }
 .pfm-stats .pfm-result-todate { background: rgba(70, 100, 160, 0.3); }
+.pfm-stats .pfm-result-session { background: rgba(120, 100, 60, 0.3); }
+.pfm-stats .pfm-checks td:last-child { text-align: left; }
+.pfm-stats .pfm-checks .pfm-chip { display: inline-block; margin: 1px 0; text-transform: none; }
+.pfm-stats .pfm-chip.pass { border-color: #4a8a4a; }
+.pfm-stats .pfm-chip.fail { border-color: #9a4a4a; }
 .pfm-stats .pfm-result-tag { padding: 0 0.4rem; border-radius: 3px; }
 .pfm-stats .pfm-status { font-size: 0.85em; padding: 0 0.3rem; border-radius: 3px; background: rgba(120, 120, 120, 0.3); }
 .pfm-stats .pfm-status-active { background: rgba(60, 140, 70, 0.4); }

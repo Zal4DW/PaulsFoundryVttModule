@@ -16,6 +16,7 @@ export function leaderboards(heroes) {
     { id: "assists", label: "Setup Artist", hint: "Most assists (damage on enemies a teammate finished)", value: (s) => s.assists, show: (v) => `${v} assists` },
     { id: "accuracy", label: "Sharpshooter", hint: "Best hit rate, at least 2 attacks", value: (s) => (s.attacks >= 2 ? s.hitRate : null), show: (v) => pct(v) },
     { id: "tank", label: "Punching Bag", hint: "Most damage taken", value: (s) => s.damageTaken + s.woundsTaken, show: (v) => `${v} taken` },
+    { id: "wounded", label: "Walking Wounded", hint: "Most wounds taken (damage past 0 health), and how often they went down", value: (s) => s.woundsTaken, show: (v, s) => `${v} wounds${s.conditions?.weakened ? ` · down ×${s.conditions.weakened}` : ""}` },
     { id: "healer", label: "Medic", hint: "Most healing given", value: (s) => s.healingDone, show: (v) => `${v} healed` },
     { id: "support", label: "Cheerleader", hint: "Most buffs and inspiring actions", value: (s) => s.buffs, show: (v) => `${v} buffs` },
     { id: "mover", label: "Road Runner", hint: "Most feet moved", value: (s) => s.feetMoved, show: (v, s) => `${v} ft${s.feetEstimated ? " (est.)" : ""}` },

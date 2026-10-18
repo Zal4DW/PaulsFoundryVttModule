@@ -88,6 +88,52 @@ describe("conditions, fates and the Roll of Valour page", () => {
   });
 });
 
+describe("single skill checks", () => {
+  it("records a check a hero rolls from their own sheet", () => {
+    const msg = { _id: "m1", timestamp: 1, speaker: { actor: "lyra" }, flags: { crucible: { skill: "arcana" } }, rolls: [{ total: 17, data: { actorId: "lyra", dc: 14, criticalSuccessThreshold: 6, criticalFailureThreshold: 6 } }] };
+    const meta = { L: hero("L", { actorId: "lyra", name: "Lyra" }) };
+    const recs = extractRecords([msg], { meta });
+    expect(recs).toHaveLength(1);
+    expect(recs[0]).toMatchObject({ kind: "check", actor: "L", skill: "arcana", total: 17, dc: 14, success: true });
+    expect(aggregate(recs, meta).combatants.L.checksBySkill.arcana).toEqual({ checks: 1, successes: 1 });
+  });
+});
+
+describe("Ember attunement awards", () => {
+  it("records the type and points from Ember's award card, with the hero as speaker", () => {
+    const content = `<section class="attunement-award"><table class="report-table attunement-award-table"><thead><tr><th colspan="2">Akon Attunement</th></tr></thead><tbody><tr><td class="report-label">Progress</td><td class="report-value boons"><i class="fa-solid fa-caret-up" inert></i> +1</td></tr></tbody></table></section>`;
+    const msg = { _id: "a1", timestamp: 1, speaker: { actor: "vex" }, content, flags: { crucible: { isAwardSummary: true }, ember: { attunementAward: true } } };
+    const meta = { V: hero("V", { actorId: "vex", name: "Vex" }) };
+    const recs = extractRecords([msg], { meta });
+    expect(recs).toMatchObject([{ kind: "attunement", actor: "V", attunement: "akon", amount: 1 }]);
+    expect(aggregate(recs, meta).combatants.V.attunements.akon.points).toBe(1);
+  });
+});
+
+describe("hazards", () => {
+  // A Crucible hazard card: no actor, the speaker is "Environment", and the action carries the "hazard" tag.
+  const card = { _id: "h1", timestamp: 1, speaker: { alias: "Environment", actor: null }, rolls: [{ total: 16, data: { dc: 13, result: 2 } }],
+    flags: { crucible: { actor: null, action: { id: "environmentAttack", name: "Caustic Slime", tags: ["hazard", "reflex", "acid", "health"] },
+      targets: [{ actor: "Actor.senna" }], events: [{ type: "activation", target: null, resources: [] },
+        { type: "attack", rollIndex: 0, target: "Actor.senna", resources: [{ resource: "health", delta: -7, damageType: "acid" }] }] } } };
+  const meta = { S: hero("S", { actorId: "senna", name: "Senna" }) };
+
+  it("credits hazard damage to the named hazard, not to nobody", () => {
+    const [rec] = extractRecords([card], { meta });
+    expect(rec).toMatchObject({ kind: "action", actor: "hazard:caustic-slime", hazard: true, actionName: "Caustic Slime" });
+    const s = aggregate([rec], meta);
+    expect(s.hazards.map((h) => [h.name, h.side, h.attacks])).toEqual([["Caustic Slime", "hazard", 1]]);
+    expect(s.combatants.S.attacksReceived).toBe(1);
+    expect(s.adversaries.members).toBe(0); // a hazard is not an adversary
+    expect(s.timeline.at(-1).text).toMatch(/^Caustic Slime Caustic Slime → Senna/);
+  });
+
+  it("counts conditions picked up outside combat", () => {
+    const s = aggregate([{ kind: "condition", actor: "S", status: "blinded", on: true, round: null }, { kind: "check", actor: "S", skill: "medicine", total: 7, dc: 15, success: false }], meta);
+    expect(s.combatants.S.conditions).toEqual({ blinded: 1 });
+  });
+});
+
 describe("kill log order", () => {
   it("lists kills by the round they happened, not by who was hit first", () => {
     const hit = (actor, target, round, health) => ({ kind: "action", actor, round, actionId: "strike", tags: [], spent: {}, restored: {}, effects: [], heals: [], attacks: [{ target, total: 15, dc: 10, result: "hit", health, wounds: 0, morale: 0 }] });

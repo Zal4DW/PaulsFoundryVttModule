@@ -36,6 +36,13 @@ describe("stats to date", () => {
     expect(hilde.combatRolls.count).toBe(3);
   });
 
+  it("lists the out-of-combat bucket as a session with its checks, and adds its checks to the party by skill", () => {
+    expect(s.summary.sessions).toBe(1);
+    expect(s.sessions).toMatchObject([{ id: "session-2026-10-18", heroes: ["Hilde"] }]);
+    expect([s.sessions[0].checks.count, s.sessions[0].checks.successes]).toEqual([1, 1]);
+    expect(s.party.checksBySkill.medicine).toEqual({ checks: 1, successes: 1 });
+  });
+
   it("does not count the out-of-combat bucket as a fight", () => {
     expect(isCombatFight(session)).toBe(false);
     expect(s.summary.fights).toBe(2);

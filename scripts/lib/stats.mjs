@@ -32,6 +32,17 @@ export function checkOutcome(total, dc, { critSuccess = CRIT, critFailure = CRIT
  * Resolve a Crucible actor uuid to a combatant key (the token id where possible).
  * "Scene.S.Token.T.Actor.A" -> "T". "Actor.A" (a linked actor) -> the token key whose actorId is A.
  */
+/** The stats key for a hazard, from its name: "Caustic Slime" -> "hazard:caustic-slime". */
+export const hazardKey = (name) => `hazard:${String(name ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+export const isHazardKey = (key) => String(key ?? "").startsWith("hazard:");
+
+/** Display names for hazard keys, from the records that carry them. */
+function hazardNames(records) {
+  const names = {};
+  for (const r of records) if (r.hazard) names[r.actor] = r.actionName;
+  return names;
+}
+
 export function actorKey(uuid, meta = {}) {
   if (!uuid) return null;
   const token = /Token\.([^.]+)/.exec(uuid)?.[1];
@@ -110,10 +121,31 @@ export function extractRecords(messages, { meta = {}, rounds = {}, moveFeet = {}
       continue;
     }
 
+    // Ember's attunement award card: flags.ember.attunementAward, the hero as speaker, "<Type> Attunement" and "+N" in the table.
+    // Read from the card because Ember changes the actor flag in place, so an actor update shows no change.
+    if (m.flags?.ember?.attunementAward) {
+      const type = /<th[^>]*>\s*([^<]+?)\s+Attunement\s*</i.exec(m.content ?? "")?.[1];
+      const amount = Number(/report-value[^>]*>(?:\s*<i[^>]*><\/i>)?\s*([+-]?\d+)/.exec(m.content ?? "")?.[1]);
+      if (m.speaker?.actor && type && amount) records.push({ ...base, round: null, turn: null, kind: "attunement", actor: keyForActorId(m.speaker.actor, meta), attunement: type.toLowerCase(), amount, rank: null, ranksGained: 0 });
+      continue;
+    }
+
+    // A single skill check a hero rolls from their own sheet (or a journal check link): flags.crucible.skill, no group.
+    if (c.skill && !c.action) {
+      for (const raw of m.rolls ?? []) {
+        const r = parseRoll(raw);
+        if (!r?.data?.actorId && !m.speaker?.actor) continue;
+        records.push({ ...base, kind: "check", actor: keyForActorId(r.data?.actorId ?? m.speaker.actor, meta), skill: c.skill, total: r.total, dc: r.data?.dc ?? null, ...checkOutcome(r.total, r.data?.dc, { critSuccess: r.data?.criticalSuccessThreshold ?? CRIT, critFailure: r.data?.criticalFailureThreshold ?? CRIT }) });
+      }
+      continue;
+    }
+
     // Crucible action cards.
     if (c.action) {
-      const actor = actorKey(c.actor, meta);
       const action = c.action;
+      // A hazard card (Caustic Slime, a rockfall) has no actor. Credit it to the hazard itself.
+      const hazard = !c.actor && (action.tags ?? []).includes("hazard");
+      const actor = hazard ? hazardKey(action.name) : actorKey(c.actor, meta);
       const events = c.events ?? [];
       const rolls = (m.rolls ?? []).map(parseRoll);
       const activation = events.find((e) => e.type === "activation");
@@ -121,7 +153,7 @@ export function extractRecords(messages, { meta = {}, rounds = {}, moveFeet = {}
       const spent = {}, restored = {};
       for (const [k, v] of Object.entries(spentRaw)) (v < 0 ? spent : restored)[k] = Math.abs(v);
 
-      const rec = { ...base, kind: "action", actor, actionId: action.id, actionName: action.name ?? spellName(action.id), tags: action.tags ?? [], confirmed: !!c.confirmed, spent, restored, attacks: [], heals: [], effects: [] };
+      const rec = { ...base, kind: "action", actor, ...(hazard ? { hazard: true } : {}), actionId: action.id, actionName: action.name ?? spellName(action.id), tags: action.tags ?? [], confirmed: !!c.confirmed, spent, restored, attacks: [], heals: [], effects: [] };
 
       // Attack rolls, matched to their events by rollIndex.
       for (const e of events.filter((x) => x.rollIndex !== undefined || x.type === "strike" || x.type === "attack")) {
@@ -286,7 +318,8 @@ export function fightOutcome(meta, override = null) {
 export function aggregate(records, meta = {}, { outcome = null } = {}) {
   const stats = {};
   const S = (key) => (stats[key] ??= { key, ...blank() });
-  const side = (key) => (meta[key]?.type === "hero" ? "hero" : meta[key]?.type ? "adversary" : "unknown");
+  const side = (key) => (isHazardKey(key) ? "hazard" : meta[key]?.type === "hero" ? "hero" : meta[key]?.type ? "adversary" : "unknown");
+  const hazards = hazardNames(records);
 
   // Damage ledger per target, in order, for kill attribution.
   const ledger = {};
@@ -384,7 +417,7 @@ export function aggregate(records, meta = {}, { outcome = null } = {}) {
   // Derived values.
   for (const s of Object.values(stats)) {
     const m = meta[s.key] ?? {};
-    Object.assign(s, { name: m.name ?? s.key, side: side(s.key), important: !!m.important, major: isMajor(m), rank: m.rank ?? null, finalState: m.state ?? null, finalStatuses: m.statuses ?? [], out: isOut(m) });
+    Object.assign(s, { name: m.name ?? hazards[s.key] ?? s.key, side: side(s.key), important: !!m.important, major: isMajor(m), rank: m.rank ?? null, finalState: m.state ?? null, finalStatuses: m.statuses ?? [], out: isOut(m) });
     s.hitRate = s.attacks ? (s.hits + s.glances) / s.attacks : null;
     s.cleanHitRate = s.attacks ? s.hits / s.attacks : null;
     s.critRate = s.attacks ? s.crits / s.attacks : null;
@@ -408,6 +441,7 @@ export function aggregate(records, meta = {}, { outcome = null } = {}) {
 
   return {
     heroes, majorAdversaries: majors, adversaries: rollup, combatants: stats, kills,
+    hazards: Object.values(stats).filter((s) => s.side === "hazard"),
     party: rollUp(heroes, "Party"),
     outcome: fightOutcome(meta, outcome),
     notes: records.filter((r) => r.kind === "note").map((r) => ({ actor: r.actor ? meta[r.actor]?.name ?? r.actor : null, text: r.text })),
@@ -440,6 +474,13 @@ export function rollUp(rows, name) {
   const avoidedBy = {};
   for (const s of rows) for (const [k, v] of Object.entries(s.avoidedBy ?? {})) avoidedBy[k] = (avoidedBy[k] ?? 0) + v;
   out.avoidedBy = avoidedBy;
+  out.checksBySkill = {};
+  for (const s of rows) {
+    for (const [k, v] of Object.entries(s.checksBySkill ?? {})) {
+      const b = (out.checksBySkill[k] ??= { checks: 0, successes: 0 });
+      b.checks += v.checks; b.successes += v.successes;
+    }
+  }
   return out;
 }
 
@@ -453,13 +494,8 @@ function mergeCombatant(rows, key, name) {
   out.checkSuccessRate = out.checks ? out.checkSuccesses / out.checks : null;
   out.level = Math.max(0, ...rows.map((s) => s.level ?? 0)) || null;
   out.conditions = {};
-  out.checksBySkill = {};
   for (const s of rows) {
     for (const [k, v] of Object.entries(s.conditions ?? {})) out.conditions[k] = (out.conditions[k] ?? 0) + v;
-    for (const [k, v] of Object.entries(s.checksBySkill ?? {})) {
-      const b = (out.checksBySkill[k] ??= { checks: 0, successes: 0 });
-      b.checks += v.checks; b.successes += v.successes;
-    }
   }
   out.mvp = mvpScore(out);
   return out;
@@ -488,6 +524,7 @@ export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } 
   const kills = [];
   const results = { victory: 0, defeat: 0, withdrawn: 0, undecided: 0 };
   const fightList = [];
+  const sessions = []; // out-of-combat buckets that hold skill checks
   let rounds = 0;
 
   for (const f of ordered) {
@@ -498,6 +535,8 @@ export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } 
       results[stats.outcome.result] = (results[stats.outcome.result] ?? 0) + 1;
       rounds += stats.summary.rounds;
       fightList.push({ id: f.id, name: f.name, started: f.started ?? null, outcome: stats.outcome, rounds: stats.summary.rounds, mvp: stats.combatants[stats.summary.mvp]?.name ?? null, heroes: stats.heroes.map((s) => s.name) });
+    } else if (stats.party.checks) {
+      sessions.push({ id: f.id, name: f.name, started: f.started ?? null, checks: stats.party.checkRolls, heroes: stats.heroes.map((s) => s.name) });
     }
     // Map this fight's keys to the to-date keys.
     const keyMap = {};
@@ -565,15 +604,17 @@ export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } 
     outcome: null,
     notes: [],
     fights: fightList,
+    sessions,
     results,
-    summary: { fights: fightList.length, rounds, mvp: heroRows[0]?.key ?? null, heroKills: kills.filter((k) => side(k.by) === "hero").length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroRows.reduce((a, s) => a + s.deaths, 0) },
+    summary: { fights: fightList.length, sessions: sessions.length, rounds, mvp: heroRows[0]?.key ?? null, heroKills: kills.filter((k) => side(k.by) === "hero").length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroRows.reduce((a, s) => a + s.deaths, 0) },
     timeline: []
   };
 }
 
 /** Play-by-play lines, grouped by round. */
 export function timeline(records, meta, kills) {
-  const name = (k) => meta[k]?.name ?? k;
+  const hazards = hazardNames(records);
+  const name = (k) => meta[k]?.name ?? hazards[k] ?? k;
   const killAt = new Map(kills.map((k) => [k.target, k]));
   const lines = [];
   for (const r of records) {
