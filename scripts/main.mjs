@@ -5,6 +5,7 @@ import { fightFromExport } from "./lib/stats.mjs";
 import { StatsDashboard } from "./stats/dashboard.mjs";
 import { addFightNote, chronicleJournal, rebuildFight, setFightOutcome, startRecorder, writeFightJournal } from "./stats/recorder.mjs";
 import { registerStatsSettings, updateLog, flushLog } from "./stats/store.mjs";
+import { registerGripToggle, toggleGrip } from "./grip.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -99,8 +100,11 @@ Hooks.once("init", () => {
   // Fight stats. Every user can read them; the GM client records them. A change re-draws open dashboards.
   registerStatsSettings(MODULE_ID, () => { if (statsApp?.rendered) statsApp.render(); });
 
+  // Crucible only: a grip toggle for Versatile weapons on actor sheets.
+  if (game.system.id === "crucible") registerGripToggle();
+
   // Public API, used by macros and by the Quench tests.
-  game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter, openStats, openChronicle, importFight,
+  game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter, openStats, openChronicle, importFight, toggleGrip,
     rebuildFight: (fightId) => rebuildFight(MODULE_ID, fightId),
     addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
     setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),
