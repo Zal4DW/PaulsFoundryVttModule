@@ -6,9 +6,12 @@ import { StatsDashboard } from "./stats/dashboard.mjs";
 import { addFightNote, chronicleJournal, rebuildFight, setFightOutcome, startRecorder, writeFightJournal } from "./stats/recorder.mjs";
 import { registerStatsSettings, updateLog, flushLog } from "./stats/store.mjs";
 import { registerGripToggle, toggleGrip } from "./grip.mjs";
+import { importHistory } from "./stats/history.mjs";
+import { dismissTosslight, placeTosslight, registerTosslight } from "./tosslight.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
+const STATS_IMPORT_PATTERN = /^\/stats\s+import\s*$/i;
 
 Hooks.once("init", () => {
   game.settings.register(MODULE_ID, "enabled", {
@@ -100,11 +103,17 @@ Hooks.once("init", () => {
   // Fight stats. Every user can read them; the GM client records them. A change re-draws open dashboards.
   registerStatsSettings(MODULE_ID, () => { if (statsApp?.rendered) statsApp.render(); });
 
-  // Crucible only: a grip toggle for Versatile weapons on actor sheets.
-  if (game.system.id === "crucible") registerGripToggle();
+  // Crucible only: a grip toggle for Versatile weapons on actor sheets, and Reveal's tosslight as real token light.
+  if (game.system.id === "crucible") {
+    registerGripToggle();
+    registerTosslight(MODULE_ID);
+  }
 
   // Public API, used by macros and by the Quench tests.
   game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter, openStats, openChronicle, importFight, toggleGrip,
+    importHistory: (options) => importHistory(MODULE_ID, options), promptImportHistory,
+    placeTosslight: (token, casterUuid) => placeTosslight(MODULE_ID, token, casterUuid),
+    dismissTosslight: (token) => dismissTosslight(MODULE_ID, token),
     rebuildFight: (fightId) => rebuildFight(MODULE_ID, fightId),
     addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
     setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),
@@ -166,6 +175,28 @@ async function openChronicle() {
  * Add a fight from an exported fight file (the shape of test/fixtures/day1-ring-of-valor.json). GM only.
  * @param {object|string} data  The export, or a URL to fetch it from.
  */
+/**
+ * "/stats import": read the world's past chat history into the stats. Shows what it would add, and saves only
+ * when the GM confirms. Running it again adds nothing, because messages already in the log are skipped.
+ */
+async function promptImportHistory() {
+  if (!game.user.isGM) { ui.notifications.warn(game.i18n.localize("PFM.Stats.History.GmOnly")); return null; }
+  const preview = await importHistory(MODULE_ID, { dryRun: true });
+  if (!preview.fights.length && !preview.sessions.length) {
+    ui.notifications.info(game.i18n.format("PFM.Stats.History.Nothing", { skipped: preview.skipped }));
+    return preview;
+  }
+  const esc = foundry.utils.escapeHTML;
+  const line = (label, n) => `<li>${esc(label)}: ${esc(game.i18n.format("PFM.Stats.History.Cards", { cards: n }))}</li>`;
+  const content = `<p>${esc(game.i18n.format("PFM.Stats.History.Preview", { fights: preview.fights.length, sessions: preview.sessions.length, skipped: preview.skipped }))}</p>
+    <ul>${preview.fights.map((f) => line(f.name, f.cards)).join("")}${preview.sessions.map((s) => line(s.id, s.cards)).join("")}</ul>`;
+  const ok = await foundry.applications.api.DialogV2.confirm({ window: { title: game.i18n.localize("PFM.Stats.History.Title") }, content, rejectClose: false });
+  if (!ok) return preview;
+  const result = await importHistory(MODULE_ID, { dryRun: false });
+  ui.notifications.info(game.i18n.format("PFM.Stats.History.Done", { fights: result.fights.length, sessions: result.sessions.length }));
+  return result;
+}
+
 async function importFight(data, { id, name } = {}) {
   if (!game.user.isGM) throw new Error("Only a GM can import fights.");
   if (typeof data === "string") {
@@ -282,10 +313,15 @@ Hooks.once("init", () => {
       rgx: STATS_PATTERN,
       fn: () => { openStats(); return false; }
     };
+    ChatLog.CHAT_COMMANDS.statsImport = {
+      rgx: STATS_IMPORT_PATTERN,
+      fn: () => { promptImportHistory(); return false; }
+    };
     return;
   }
   Hooks.on("chatMessage", (_log, message) => {
     if (STATS_PATTERN.test(message.trim())) { openStats(); return false; }
+    if (STATS_IMPORT_PATTERN.test(message.trim())) { promptImportHistory(); return false; }
     if (!game.settings.get(MODULE_ID, "enabled")) return true;
     if (!isHelloCommand(message)) return true;
     sayHello();
