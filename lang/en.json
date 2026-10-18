@@ -45,6 +45,8 @@
   "PFM.Stats.Hero": "Hero",
   "PFM.Stats.Party": "Party",
   "PFM.Stats.Adversaries": "Adversaries",
+  "PFM.Stats.Companion": "companion",
+  "PFM.Stats.CompanionHint": "A companion or summon fighting for the party: a party member or a Friendly token that is not a hero. Its kills count as party kills. It is left out of the Party total, the MVP and the awards.",
   "PFM.Stats.Minions": "Adversaries (rolled up)",
   "PFM.Stats.Majors": "Major adversaries",
   "PFM.Stats.Major": "Major adversary",

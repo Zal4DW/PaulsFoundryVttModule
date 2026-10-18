@@ -61,6 +61,18 @@ The engine is `aggregateToDate` in `scripts/lib/stats.mjs`.
 | Rolls | Totals in two groups, kept apart: combat (attack rolls) and skill checks. Each group has average, lowest, highest, successes, failures, critical successes and critical failures. Die faces are not tracked. A roll with no DC counts toward the average but not toward successes or failures. |
 | Avg pos | Defeated combatants are left out, so position is counted among those still standing. |
 
+## Companions and summons
+
+Crucible has no companion actor type, so a companion is an Adversary actor. The recorder counts a non-hero as an ally when any of these holds:
+
+- It is a member of the party group. Ember adds its companions this way, and Senna's oozeling Tide was added the same way.
+- Its token is Friendly. Crucible gives a summoned creature its summoner's disposition, so a hero's summons (a Constructed Companion, a conjured spell creature) are Friendly. An adversary's summons are hostile and count as adversaries.
+- Its actor carries the `pauls-foundry-module.companionOf` flag.
+
+An ally is listed under the heroes as a "companion" row. Its kills count as party kills, and a companion killed by an adversary counts as an adversary kill. Allies never decide a fight's result, and they are left out of the Party total, the MVP and the awards. To date, a companion merges across fights by actor.
+
+Fights recorded before 0.3.1 have no ally marks, so a companion in one of them still shows as an adversary.
+
 ## Names
 
 Heroes show their own name. If a hero's token has a different name (for example Ignis with a token named "Anne"), the dashboard shows the token name as a tooltip. Adversaries show their token name, so two oozes can be told apart.
