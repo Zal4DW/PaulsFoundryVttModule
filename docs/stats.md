@@ -20,7 +20,7 @@ Open it with `/stats` in chat, or from a macro with `game.modules.get("pauls-fou
 ## Views
 
 - **Party.** Scoreboard, MVP, leaderboards, a stat table per hero with party and adversary totals, and the kill log.
-- **My Hero.** One hero's stats with their rank in the party, misses by defence, skill checks, dice histogram and progression. A player sees their assigned character first.
+- **My Hero.** One hero's stats with their rank in the party, misses by defence, skill checks, roll totals and progression. A player sees their assigned character first.
 - **Adversaries.** Ordinary adversaries rolled up into one row. Major adversaries (Crucible's "important" flag, the star on the sheet) get their own rows and their fate.
 - **Play-by-Play.** Every action, check and kill, grouped by round.
 
@@ -31,6 +31,7 @@ Open it with `/stats` in chat, or from a macro with `game.modules.get("pauls-fou
 | Hit % | Hits and glances divided by attacks. A glance falls short of the defence but still deals reduced damage. |
 | Crit | An attack total above DC + 6 (or the roll's own threshold). Fumble is DC - 6 or below. |
 | Dmg | Health damage plus wounds dealt. |
+| Dmg/hit | Average damage over the attacks that dealt damage, with the lowest and highest. Misses are left out. |
 | Kill | The final damaging blow on a target that ended dead or defeated. |
 | Solo kill | Only the killer damaged the target. |
 | Earned kill | The killer did the most damage to the target, tied or outright. |
@@ -38,12 +39,12 @@ Open it with `/stats` in chat, or from a macro with `game.modules.get("pauls-fou
 | Assist | Damage on a target that someone else killed. |
 | Avg pos | Average place in the round's initiative order. 1 is first. |
 | Heroism | Gained / spent. The bracketed value was lost when combat ended. |
-| Luck | Each die scored from 0% (a 1) to 100% (its top face), then averaged. 50% is average on any die size. |
-| Boons, banes | Totals across a hero's rolls, and how many rolls had any. |
+| Rolls | Totals in two groups, kept apart: combat (attack rolls) and skill checks. Each group has average, lowest, highest, successes, failures, critical successes and critical failures. Die faces are not tracked. A roll with no DC counts toward the average but not toward successes or failures. |
+| Avg pos | Defeated combatants are left out, so position is counted among those still standing. |
 
-## Dice sizes
+## Names
 
-Crucible rolls three dice, d8 by default. Each boon steps one die up (d10, then d12). Each bane steps one down (d6, then d4). The recorder stores each die as `[size, result]`, and the dashboard draws one histogram per size. A raw average of faces would be wrong here: a 3 on a d4 is a better roll than a 4 on a d12. Records saved before sizes were tracked hold bare numbers, and the dashboard reads those as d8s.
+Heroes show their own name. If a hero's token has a different name (for example Ignis with a token named "Anne"), the dashboard shows the token name as a tooltip. Adversaries show their token name, so two oozes can be told apart.
 
 ## MVP score
 
@@ -73,3 +74,14 @@ The path is relative to Foundry's Data folder. Importing again with the same id 
 - `scripts/stats/recorder.mjs`: the GM-side hooks.
 - `scripts/stats/store.mjs`: the world setting, with writes batched every 750 ms.
 - `scripts/stats/dashboard.mjs`: the ApplicationV2 window.
+
+## Results, majors and the Roll of Valour
+
+- **Keys.** K opens the stats window. L opens it on the Roll of Valour tab. Both can be rebound in Configure Controls.
+- **Major adversaries** are those marked important, or ranked boss or elite. They are listed on their own; the rest are rolled up.
+- **Fight result.** When combat ends, the result is worked out from who is left: Defeat when every hero is dead or insane, Victory when every major adversary (or, with none, every adversary) is down, otherwise Undecided. A GM can set it instead with `api.setFightOutcome(fightId, "victory" | "defeat" | "withdrawn", note)`.
+- **End state.** Each combatant's health, wounds, morale, madness and conditions are kept from the end of the fight, so fates read in full: "Victorious: fought on at 0 health with 63 of 105 wounds, 3 kills".
+- **Conditions.** Broken, insane, dead, weakened, frightened and similar conditions are logged as they start, with the round.
+- **Notes.** `api.addFightNote(fightId, actorName, text)` records what the cards do not show, such as a ritual or a ruling.
+- **Roll of Valour.** When combat ends, a page for the fight is written to the "Roll of Valour" journal, which players can read. Rename it with the Fight Journal Name setting. `api.writeFightJournal(fightId)` rewrites a page.
+- **Rebuilding.** `api.rebuildFight(fightId)` re-extracts a fight's records from its chat cards after the stats engine changes.

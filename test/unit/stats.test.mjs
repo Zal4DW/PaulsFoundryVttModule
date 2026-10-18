@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { aggregate, checkOutcome, diceFaces, dieLuck, estimateMoves, extractRecords, actorKey, fightFromExport } from "../../scripts/lib/stats.mjs";
+import { aggregate, checkOutcome, hasDice, spellName, estimateMoves, extractRecords, actorKey, fightFromExport } from "../../scripts/lib/stats.mjs";
 import { contextFromFixture, loadFixture } from "./fixture-context.mjs";
 
 describe("checkOutcome (Crucible rules)", () => {
@@ -25,18 +25,9 @@ describe("checkOutcome (Crucible rules)", () => {
 });
 
 describe("helpers", () => {
-  it("reads each die's size and result from a serialized roll", () => {
-    // A boon steps a d8 up to a d10. A bane steps one down to a d6.
-    const roll = { terms: [{ class: "Die", faces: 10, results: [{ result: 7, active: true }] }, { class: "OperatorTerm" }, { class: "Die", faces: 6, results: [{ result: 1, active: true }] }, { class: "NumericTerm", number: 2 }] };
-    expect(diceFaces(roll)).toEqual([[10, 7], [6, 1]]);
-    expect(diceFaces(JSON.stringify(roll))).toEqual([[10, 7], [6, 1]]);
-  });
-
-  it("scores luck against the die's own size", () => {
-    expect(dieLuck(4, 4)).toBe(1);
-    expect(dieLuck(12, 1)).toBe(0);
-    expect(dieLuck(8, 4.5)).toBe(0.5);
-    expect(dieLuck(12, 4)).toBeLessThan(dieLuck(4, 3)); // a 4 on a d12 is worse than a 3 on a d4
+  it("tells a real roll from a defeated combatant's empty initiative roll", () => {
+    expect(hasDice({ terms: [{ class: "Die", faces: 8, results: [{ result: 7 }] }] })).toBe(true);
+    expect(hasDice(JSON.stringify({ terms: [{ class: "NumericTerm", number: 0 }] }))).toBe(false);
   });
 
   it("keys unlinked token actors by token id and linked actors through the metadata", () => {
@@ -58,9 +49,10 @@ describe("Day One: The Feral Scramble (fixture)", () => {
     stats = aggregate(records, ctx.meta);
   });
 
-  it("extracts initiative for 12 combatants over 3 rounds, 46 actions and 5 checks", () => {
+  it("extracts initiative for the combatants still standing each round, 46 actions and 5 checks", () => {
     const count = (k) => records.filter((r) => r.kind === k).length;
-    expect(count("initiative")).toBe(36);
+    expect(count("initiative")).toBe(27); // 36 rows, less 9 for defeated combatants
+    expect(records.filter((r) => r.kind === "initiative" && r.round === 3).every((r) => r.of === 6)).toBe(true);
     expect(count("action")).toBe(46);
     expect(count("check")).toBe(5);
   });
@@ -119,18 +111,25 @@ describe("Day One: The Feral Scramble (fixture)", () => {
     expect(medicine.filter((r) => r.critFailure).map((r) => ctx.meta[r.actor].name).sort()).toEqual(["Eliorwen", "Kagura"]);
   });
 
-  it("keeps boon and bane dice at their own size", () => {
-    const sizes = (s) => Object.keys(s.dice.sizes).map(Number).sort((a, b) => a - b);
-    const all = new Set(Object.values(stats.combatants).flatMap(sizes));
-    expect([...all].sort((a, b) => a - b)).toEqual([4, 6, 8, 10, 12]);
-    for (const s of Object.values(stats.combatants)) {
-      for (const [size, b] of Object.entries(s.dice.sizes)) expect(Math.max(...Object.keys(b.faces).map(Number))).toBeLessThanOrEqual(Number(size));
-    }
-    const party = stats.party;
-    expect(party.boons).toBeGreaterThan(0);
-    expect(party.rollsWithBoons).toBeGreaterThan(0);
-    expect(party.luck).toBeGreaterThan(0);
-    expect(party.luck).toBeLessThan(1);
+  it("keeps combat roll totals apart from skill check totals", () => {
+    const { combatRolls: c, checkRolls: k } = stats.party;
+    expect(c.count).toBe(stats.party.attacks);
+    expect(k.count).toBe(5); // four Medicine rolls and one Awareness roll
+    expect(k.successes).toBe(0);
+    expect(k.critFailures).toBe(2); // Eliorwen and Kagura on Medicine
+    expect(c.successes + c.failures).toBe(c.count);
+    expect(c.min).toBeLessThanOrEqual(c.avg);
+    expect(c.max).toBeGreaterThanOrEqual(c.avg);
+    expect(stats.party.dice).toBeUndefined();
+  });
+
+  it("tracks lowest, highest and average damage per damaging hit", () => {
+    const d = byName("Eliorwen").hitDamage;
+    expect(d.count).toBe(4); // 3 kills and 1 more hit, one attack missed
+    expect(d.sum).toBe(byName("Eliorwen").damageDealt + byName("Eliorwen").woundsDealt);
+    expect(d.max).toBe(byName("Eliorwen").biggestHit);
+    expect(d.min).toBeLessThanOrEqual(d.avg);
+    expect(stats.adversaries.hitDamage.sum).toBe(21);
   });
 
   it("tracks Focus spent and buffs from Inspire Heroism", () => {
@@ -168,12 +167,42 @@ describe("fightFromExport", () => {
     expect(stats.kills).toHaveLength(8);
   });
 
-  it("still reads older records that stored bare d8 results", () => {
+  it("counts a roll without a DC in the average but not as a success or failure", () => {
     const meta = { H: { key: "H", name: "Hero", type: "hero" } };
-    const s = aggregate([{ kind: "initiative", actor: "H", total: 10, dice: [8, 1, 4], position: 1, round: 1 }], meta).combatants.H;
-    expect(s.dice.sizes[8].count).toBe(3);
-    expect(s.ones).toBe(1);
-    expect(s.dice.maxes).toBe(1);
+    const s = aggregate([
+      { kind: "check", actor: "H", skill: "a", total: 20, dc: 12, success: true, critSuccess: true, critFailure: false, round: null },
+      { kind: "check", actor: "H", skill: "a", total: 6, dc: 12, success: false, critSuccess: false, critFailure: true, round: null },
+      { kind: "check", actor: "H", skill: "a", total: 10, dc: null, success: null, critSuccess: false, critFailure: false, round: null }
+    ], meta).combatants.H;
+    const g = s.checkRolls;
+    expect([g.count, g.avg, g.min, g.max]).toEqual([3, 12, 6, 20]);
+    expect([g.successes, g.failures, g.critSuccesses, g.critFailures]).toEqual([1, 1, 1, 1]);
+    expect(s.combatRolls.count).toBe(0);
+  });
+});
+
+describe("healing spells (Day Two card)", () => {
+  const d = loadFixture("day2-heal-spell.json");
+  const records = extractRecords([d.message], { meta: d.meta, rounds: { [d.message._id]: { round: 2, turn: 4 } } });
+  const stats = aggregate(records, d.meta);
+  const kagura = stats.combatants.pYzcfw69nnTAD75G, agnath = stats.combatants.agnathToken;
+
+  it("records a Life spell as a heal, not an attack", () => {
+    expect(records[0].attacks).toHaveLength(0);
+    expect(records[0].heals).toEqual([expect.objectContaining({ target: "agnathToken", health: 16, critSuccess: true })]);
+  });
+
+  it("credits healing done and received, and keeps heals out of attack stats", () => {
+    expect([kagura.healingDone, agnath.healingReceived]).toEqual([16, 16]);
+    expect([kagura.healCasts, kagura.healSuccesses, kagura.healCrits]).toEqual([1, 1, 1]);
+    expect([kagura.attacks, kagura.combatRolls.count, agnath.attacksReceived]).toEqual([0, 0, 0]);
+    expect(kagura.spellsCast).toBe(1);
+  });
+
+  it("names composed spells, which have no name on the card", () => {
+    expect(spellName("spell.life.ray")).toBe("Ray of Life");
+    expect(records[0].actionName).toBe("Ray of Life");
+    expect(stats.timeline[0].text).toBe("Kagura Ray of Life → Agnath: heals 16 CRIT");
   });
 });
 

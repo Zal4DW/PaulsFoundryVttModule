@@ -38,12 +38,15 @@
 .pfm-stats .pfm-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.4rem; }
 .pfm-stats .pfm-tile small { font-size: 0.75rem; font-weight: normal; opacity: 0.8; }
 .pfm-stats .pfm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.pfm-stats .pfm-die { display: grid; grid-template-columns: 1.2rem 1fr 2rem; align-items: center; gap: 0.3rem; font-size: 0.8rem; }
-.pfm-stats .pfm-diebar { height: 0.7rem; background: #4a6a8a; border-radius: 2px; min-width: 1px; }
 .pfm-stats .pfm-major h4 { margin: 0.5rem 0 0; }
 .pfm-stats .pfm-plays { margin: 0; padding-left: 1.5rem; font-size: 0.85rem; }
 .pfm-stats .pfm-plays li.kill { font-weight: bold; color: var(--color-warm-1, #ff6400); }
-.pfm-stats .pfm-diesets { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.5rem; }
-.pfm-stats .pfm-dieset h4 { margin: 0.25rem 0; font-size: 0.85rem; }
-.pfm-stats .pfm-diebar.d4, .pfm-stats .pfm-diebar.d6 { background: #8a4a4a; }
-.pfm-stats .pfm-diebar.d10, .pfm-stats .pfm-diebar.d12 { background: #4a8a5a; }
+.pfm-stats .pfm-result { padding: 0.4rem 0.6rem; margin-bottom: 0.5rem; border-radius: 4px; border: 1px solid var(--color-border, #555); }
+.pfm-stats .pfm-result-victory { background: rgba(60, 140, 70, 0.35); }
+.pfm-stats .pfm-result-defeat { background: rgba(160, 50, 50, 0.4); }
+.pfm-stats .pfm-result-withdrawn, .pfm-stats .pfm-result-undecided { background: rgba(120, 120, 120, 0.3); }
+.pfm-stats .pfm-fate { margin: 0 0 0.5rem; }
+.pfm-stats .pfm-major h4 small { font-weight: normal; text-transform: capitalize; opacity: 0.75; }
+.pfm-stats .pfm-roll table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.pfm-stats .pfm-roll td, .pfm-stats .pfm-roll th { padding: 0.15rem 0.3rem; text-align: left; }
+.pfm-stats .pfm-journal { width: auto; }

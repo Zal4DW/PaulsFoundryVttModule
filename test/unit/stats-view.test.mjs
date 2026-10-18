@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { aggregate, estimateMoves, extractRecords } from "../../scripts/lib/stats.mjs";
-import { diceBars, esc, leaderboards, num, pct, rankOf } from "../../scripts/lib/stats-view.mjs";
+import { esc, leaderboards, num, pct, rankOf } from "../../scripts/lib/stats-view.mjs";
 import { contextFromFixture, loadFixture } from "./fixture-context.mjs";
 
 describe("formatting", () => {
@@ -15,14 +15,6 @@ describe("formatting", () => {
     expect(esc(`<b>"Hi" & 'bye'</b>`)).toBe("&lt;b&gt;&quot;Hi&quot; &amp; &#39;bye&#39;&lt;/b&gt;");
   });
 
-  it("builds one histogram per die size, smallest first, scaled to that die's most common face", () => {
-    const sets = diceBars({ sizes: { 8: { count: 6, faces: { 1: 2, 8: 4 } }, 4: { count: 1, faces: { 3: 1 } } } });
-    expect(sets.map((d) => d.size)).toEqual([4, 8]);
-    expect(sets[0].bars).toHaveLength(4);
-    expect(sets[0].bars[2]).toEqual({ face: 3, count: 1, width: 100 });
-    expect(sets[1].bars).toHaveLength(8);
-    expect(sets[1].bars[0]).toEqual({ face: 1, count: 2, width: 50 });
-  });
 });
 
 describe("leaderboards and ranks on Day One", () => {

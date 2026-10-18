@@ -3,7 +3,7 @@ import { OPEN_PARTY_KEY, partyOpenDecision } from "./lib/party.mjs";
 import { chooseCharacter, OPEN_CHARACTER_KEY } from "./lib/character.mjs";
 import { fightFromExport } from "./lib/stats.mjs";
 import { StatsDashboard } from "./stats/dashboard.mjs";
-import { startRecorder } from "./stats/recorder.mjs";
+import { addFightNote, chronicleJournal, rebuildFight, setFightOutcome, startRecorder, writeFightJournal } from "./stats/recorder.mjs";
 import { registerStatsSettings, updateLog, flushLog } from "./stats/store.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
@@ -66,11 +66,45 @@ Hooks.once("init", () => {
     precedence: CONST.KEYBINDING_PRECEDENCE.PRIORITY
   });
 
+  // The journal of fight write-ups. Renaming here renames the journal itself.
+  game.settings.register(MODULE_ID, "chronicleName", {
+    name: "PFM.Settings.ChronicleName.Name",
+    hint: "PFM.Settings.ChronicleName.Hint",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "Roll of Valour",
+    onChange: async (name) => { if (game.user.isGM) await (await chronicleJournal(MODULE_ID, { create: false }))?.update({ name }); }
+  });
+
+  // K opens the fight stats dashboard, L the same window on its Roll of Valour tab. Both work for players and the GM.
+  // (V would suit "valour", but Crucible Tongs uses it for the previous combat turn.)
+  game.keybindings.register(MODULE_ID, "openChronicle", {
+    name: "PFM.Keybindings.OpenChronicle.Name",
+    hint: "PFM.Keybindings.OpenChronicle.Hint",
+    editable: [{ key: "KeyL" }],
+    onDown: () => { openStats({ tab: "roll" }); return true; },
+    restricted: false,
+    precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
+  });
+  game.keybindings.register(MODULE_ID, "openStats", {
+    name: "PFM.Keybindings.OpenStats.Name",
+    hint: "PFM.Keybindings.OpenStats.Hint",
+    editable: [{ key: "KeyK" }],
+    onDown: () => { openStats(); return true; },
+    restricted: false,
+    precedence: CONST.KEYBINDING_PRECEDENCE.NORMAL
+  });
+
   // Fight stats. Every user can read them; the GM client records them. A change re-draws open dashboards.
   registerStatsSettings(MODULE_ID, () => { if (statsApp?.rendered) statsApp.render(); });
 
   // Public API, used by macros and by the Quench tests.
-  game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter, openStats, importFight };
+  game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter, openStats, openChronicle, importFight,
+    rebuildFight: (fightId) => rebuildFight(MODULE_ID, fightId),
+    addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
+    setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),
+    writeFightJournal: (fightId) => writeFightJournal(MODULE_ID, fightId) };
 });
 
 Hooks.once("ready", () => {
@@ -110,9 +144,18 @@ let statsApp = null;
 /** Open the fight stats dashboard, or bring it to the front. */
 async function openStats(options = {}) {
   statsApp ??= new StatsDashboard(MODULE_ID, options);
-  if (statsApp.rendered) statsApp.bringToFront();
+  if (options.tab) statsApp.tab = options.tab;
+  if (statsApp.rendered) { statsApp.bringToFront(); if (options.tab) await statsApp.render(); }
   else await statsApp.render({ force: true });
   return statsApp;
+}
+
+/** Open the Roll of Valour journal, or tell the user it has no entries yet. */
+async function openChronicle() {
+  const journal = await chronicleJournal(MODULE_ID, { create: false });
+  if (!journal) return ui.notifications.info(game.i18n.localize("PFM.Stats.NoChronicle"));
+  if (!journal.testUserPermission(game.user, "OBSERVER")) return ui.notifications.warn(game.i18n.localize("PFM.Stats.NoChronicleAccess"));
+  return journal.sheet.render({ force: true });
 }
 
 /**

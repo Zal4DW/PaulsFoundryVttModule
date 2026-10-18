@@ -12,6 +12,7 @@ const foundryGlobals = {
   canvas: "readonly",
   ChatMessage: "readonly",
   fromUuidSync: "readonly",
+  JournalEntry: "readonly",
   Actor: "readonly",
   quench: "readonly"
 };

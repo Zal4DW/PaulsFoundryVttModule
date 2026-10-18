@@ -14,16 +14,13 @@ const CRIT = 6;
 const parseRoll = (r) => (typeof r === "string" ? JSON.parse(r) : r);
 
 /**
- * The dice rolled, in order, as [size, result] pairs. Crucible rolls three dice, d8 by default.
- * Each boon steps one die up (d10, d12) and each bane steps one down (d6, d4), so the size matters.
+ * True when a roll has dice. A defeated combatant's initiative row has an empty "0" roll and must not count.
+ * Only roll totals are tracked, not individual die faces.
  */
-export function diceFaces(roll) {
+export function hasDice(roll) {
   const r = parseRoll(roll);
-  return (r?.terms ?? []).filter((t) => t.class === "Die").flatMap((t) => (t.results ?? []).filter((x) => x.active !== false).map((x) => [t.faces, x.result]));
+  return (r?.terms ?? []).some((t) => t.class === "Die" && (t.results ?? []).length > 0);
 }
-
-/** How good a result is for its die: 0 for a 1, 1 for the top face. Expected value is 0.5 on any die. */
-export const dieLuck = (size, result) => (size > 1 ? (result - 1) / (size - 1) : 0.5);
 
 /** Crucible check outcome: success needs total > DC, crit success total > DC + 6, crit failure total <= DC - 6. */
 export function checkOutcome(total, dc, { critSuccess = CRIT, critFailure = CRIT } = {}) {
@@ -44,7 +41,15 @@ export function actorKey(uuid, meta = {}) {
   return hit?.key ?? (actorId ? `actor:${actorId}` : null);
 }
 
-const keyForActorId = (actorId, meta) => Object.values(meta).find((m) => m.actorId === actorId)?.key ?? `actor:${actorId}`;
+/** A readable name for a composed spell, whose card has no name: "spell.life.ray" -> "Ray of Life". */
+export function spellName(id) {
+  const [kind, rune, gesture] = String(id ?? "").split(".");
+  if (kind !== "spell" || !rune || !gesture) return id ?? null;
+  const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+  return `${cap(gesture)} of ${cap(rune)}`;
+}
+
+const keyForActorId =(actorId, meta) => Object.values(meta).find((m) => m.actorId === actorId)?.key ?? `actor:${actorId}`;
 
 /** Sum resource deltas from a list of Crucible resource changes. */
 function sumResources(resources = []) {
@@ -80,10 +85,11 @@ export function extractRecords(messages, { meta = {}, rounds = {}, moveFeet = {}
       const round = Number(/Round\s+(\d+)/i.exec(m.speaker?.alias ?? "")?.[1]) || initRound;
       const rows = [...String(m.content).matchAll(/data-combatant-id="([^"]+)"/g)].map((x) => x[1]);
       const rolls = (m.rolls ?? []).map(parseRoll);
-      rows.forEach((combatantId, i) => {
+      // Defeated combatants keep a row with an empty roll. Leave them out, and rank the rest among themselves.
+      const active = rows.map((combatantId, i) => ({ combatantId, roll: rolls[i] })).filter((x) => x.roll && hasDice(x.roll));
+      active.forEach(({ combatantId, roll }, i) => {
         const key = Object.values(meta).find((x) => x.combatantId === combatantId)?.key ?? `combatant:${combatantId}`;
-        const roll = rolls[i];
-        records.push({ ...base, kind: "initiative", round, turn: null, actor: key, total: roll?.total ?? null, dice: roll ? diceFaces(roll) : [], boons: roll?.data?.totalBoons ?? roll?.data?.boons ?? 0, banes: roll?.data?.totalBanes ?? roll?.data?.banes ?? 0, position: i + 1, of: rows.length });
+        records.push({ ...base, kind: "initiative", round, turn: null, actor: key, total: roll.total ?? null, position: i + 1, of: active.length });
         (positions[round] ??= {})[key] = i + 1;
       });
       initRound = round + 1;
@@ -99,7 +105,7 @@ export function extractRecords(messages, { meta = {}, rounds = {}, moveFeet = {}
         const r = parseRoll(raw);
         const actorId = r.data?.actorId;
         const skill = gc.actors?.[actorId]?.skillId ?? Object.keys(gc.skills ?? {})[0] ?? null;
-        records.push({ ...base, kind: "check", group: gc.checkId, aggregate: !!gc.aggregate, actor: keyForActorId(actorId, meta), skill, total: r.total, dc: r.data?.dc ?? null, dice: diceFaces(r), boons: r.data?.totalBoons ?? 0, banes: r.data?.totalBanes ?? 0, ...checkOutcome(r.total, r.data?.dc, { critSuccess: r.data?.criticalSuccessThreshold ?? CRIT, critFailure: r.data?.criticalFailureThreshold ?? CRIT }) });
+        records.push({ ...base, kind: "check", group: gc.checkId, aggregate: !!gc.aggregate, actor: keyForActorId(actorId, meta), skill, total: r.total, dc: r.data?.dc ?? null, ...checkOutcome(r.total, r.data?.dc, { critSuccess: r.data?.criticalSuccessThreshold ?? CRIT, critFailure: r.data?.criticalFailureThreshold ?? CRIT }) });
       }
       continue;
     }
@@ -115,7 +121,7 @@ export function extractRecords(messages, { meta = {}, rounds = {}, moveFeet = {}
       const spent = {}, restored = {};
       for (const [k, v] of Object.entries(spentRaw)) (v < 0 ? spent : restored)[k] = Math.abs(v);
 
-      const rec = { ...base, kind: "action", actor, actionId: action.id, actionName: action.name, tags: action.tags ?? [], confirmed: !!c.confirmed, spent, restored, attacks: [], effects: [] };
+      const rec = { ...base, kind: "action", actor, actionId: action.id, actionName: action.name ?? spellName(action.id), tags: action.tags ?? [], confirmed: !!c.confirmed, spent, restored, attacks: [], heals: [], effects: [] };
 
       // Attack rolls, matched to their events by rollIndex.
       for (const e of events.filter((x) => x.rollIndex !== undefined || x.type === "strike" || x.type === "attack")) {
@@ -123,12 +129,22 @@ export function extractRecords(messages, { meta = {}, rounds = {}, moveFeet = {}
         const res = sumResources((e.resources ?? []).filter((x) => x.resource !== "action"));
         const damageType = (e.resources ?? []).find((x) => x.damageType)?.damageType ?? r?.data?.damageType ?? null;
         const outcome = r ? checkOutcome(r.total, r.data?.dc, { critSuccess: r.data?.criticalSuccessThreshold ?? CRIT, critFailure: r.data?.criticalFailureThreshold ?? CRIT }) : {};
+        // A healing spell (Rune of Life) is rolled like an attack but restores instead of damaging.
+        if (r?.data?.restoration || (e.resources ?? []).some((x) => x.restoration)) {
+          rec.heals.push({
+            target: actorKey(e.target, meta), total: r?.total ?? null, dc: r?.data?.dc ?? null,
+            result: r ? ATTACK_RESULTS[r.data?.result] ?? String(r.data?.result) : null,
+            health: Math.max(0, res.health ?? 0), morale: Math.max(0, res.morale ?? 0),
+            critSuccess: !!(e.isCriticalSuccess ?? outcome.critSuccess), critFailure: !!outcome.critFailure
+          });
+          continue;
+        }
         rec.attacks.push({
           target: actorKey(e.target, meta),
           result: r ? ATTACK_RESULTS[r.data?.result] ?? String(r.data?.result) : null,
-          total: r?.total ?? null, dc: r?.data?.dc ?? null, dice: r ? diceFaces(r) : [],
+          total: r?.total ?? null, dc: r?.data?.dc ?? null,
           critSuccess: !!outcome.critSuccess, critFailure: !!outcome.critFailure,
-          flanked: !!r?.data?.flanked, boons: r?.data?.totalBoons ?? 0, banes: r?.data?.totalBanes ?? 0,
+          flanked: !!r?.data?.flanked,
           health: -(res.health ?? 0), morale: -(res.morale ?? 0), wounds: res.wounds ?? 0, madness: res.madness ?? 0, damageType
         });
       }
@@ -181,36 +197,55 @@ const blank = () => ({
   damageDealt: 0, moraleDamageDealt: 0, biggestHit: 0, woundsDealt: 0,
   attacksReceived: 0, avoided: 0, damageTaken: 0, moraleDamageTaken: 0, woundsTaken: 0,
   kills: 0, killsEarned: 0, killsStolen: 0, killsSolo: 0, assists: 0, deaths: 0,
-  healingDone: 0, healingReceived: 0, buffs: 0,
+  conditions: {}, healingDone: 0, healingReceived: 0, healCasts: 0, healSuccesses: 0, healCrits: 0, buffs: 0,
   spellsCast: 0, focusSpent: 0, focusRestored: 0, refocuses: 0,
   heroismSpent: 0, heroismGained: 0, heroismLostAtEnd: 0,
   milestones: 0, levelsGained: 0, level: null, attunementPoints: 0, attunementRanks: 0, attunements: {},
   apSpent: 0, feetMoved: 0, feetEstimated: false, moves: 0,
   initiativeTotal: 0, initiativeRolls: 0, positionTotal: 0,
   checks: 0, checkSuccesses: 0, checkCrits: 0, checkFumbles: 0, checksBySkill: {},
-  dice: blankDice(), boons: 0, banes: 0, rollsWithBoons: 0, rollsWithBanes: 0, marginTotal: 0, marginCount: 0
+  combatRolls: blankRolls(), checkRolls: blankRolls(), hitDamage: blankRolls(),
+  marginTotal: 0, marginCount: 0
 });
 
-function blankDice() { return { count: 0, luckSum: 0, ones: 0, maxes: 0, sizes: {} }; }
-
-/** Add one die to a dice tally. Older records stored bare d8 results, so a number counts as a d8. */
-function tallyDie(dice, die, n = 1) {
-  const [size, result] = Array.isArray(die) ? die : [8, die];
-  dice.count += n; dice.luckSum += dieLuck(size, result) * n;
-  if (result === 1) dice.ones += n;
-  if (result === size) dice.maxes += n;
-  const b = (dice.sizes[size] ??= { count: 0, faces: {} });
-  b.count += n; b.faces[result] = (b.faces[result] ?? 0) + n;
+/** Roll totals for one group: combat (attacks) or skill checks. Kept apart, because they mean different things. */
+export function blankRolls() {
+  return { count: 0, sum: 0, min: null, max: null, successes: 0, failures: 0, critSuccesses: 0, critFailures: 0 };
 }
 
-/** Tally a roll's dice, and its boons and banes. */
-const addDice = (s, dice, roll = {}) => {
-  for (const d of dice ?? []) tallyDie(s.dice, d);
-  if (!dice?.length) return;
-  s.boons += roll.boons ?? 0; s.banes += roll.banes ?? 0;
-  if (roll.boons > 0) s.rollsWithBoons++;
-  if (roll.banes > 0) s.rollsWithBanes++;
-};
+/**
+ * Tally one attack or check roll by its total and outcome. Die faces are not tracked.
+ * Rolls without a DC count toward the average, lowest and highest, but not toward successes or failures.
+ */
+function addRoll(g, roll) {
+  if (roll.total === null || roll.total === undefined) return;
+  g.count++; g.sum += roll.total;
+  g.min = g.min === null ? roll.total : Math.min(g.min, roll.total);
+  g.max = g.max === null ? roll.total : Math.max(g.max, roll.total);
+  if (roll.dc === null || roll.dc === undefined) return;
+  const success = roll.success ?? roll.total > roll.dc;
+  if (success) g.successes++; else g.failures++;
+  if (roll.critSuccess) g.critSuccesses++;
+  if (roll.critFailure) g.critFailures++;
+}
+
+/** Add the average and success rate to a roll group. */
+function finishRolls(g) {
+  const decided = g.successes + g.failures;
+  return Object.assign(g, { avg: g.count ? g.sum / g.count : null, successRate: decided ? g.successes / decided : null });
+}
+
+/** Merge roll groups, for the party and adversary rollups. */
+function mergeRolls(groups) {
+  const out = blankRolls();
+  for (const g of groups) {
+    if (!g?.count) continue;
+    for (const k of ["count", "sum", "successes", "failures", "critSuccesses", "critFailures"]) out[k] += g[k];
+    out.min = out.min === null ? g.min : Math.min(out.min, g.min);
+    out.max = out.max === null ? g.max : Math.max(out.max, g.max);
+  }
+  return finishRolls(out);
+}
 const isHealingAction = (r) => r.tags.includes("healing") || /heal|bloom|mend|restor/i.test(r.actionId);
 
 /**
@@ -218,7 +253,37 @@ const isHealingAction = (r) => r.tags.includes("healing") || /heal|bloom|mend|re
  * @param {object[]} records  From extractRecords (and estimateMoves).
  * @param {Record<string, object>} meta  Combatant metadata by key: {key, name, type, important, dead}.
  */
-export function aggregate(records, meta = {}) {
+/** A major adversary: marked important, or ranked boss or elite. Major adversaries are listed on their own. */
+export const isMajor = (m) => !!m?.important || ["boss", "elite"].includes(m?.rank);
+
+/** A combatant out of the fight: dead, insane, or (for minions and ordinary adversaries) defeated. */
+const isOut = (m) => !!m?.dead || (m?.statuses ?? []).some((x) => x === "dead" || x === "insane");
+
+/**
+ * The result of a fight from who is left standing. A GM override wins.
+ * Defeat: every hero is dead or insane. Victory: every major adversary (or, with none, every adversary) is out.
+ * @returns {{result: "victory"|"defeat"|"withdrawn"|"undecided", reason: string, by: "gm"|"auto"}}
+ */
+export function fightOutcome(meta, override = null) {
+  if (override?.result) return { result: override.result, reason: override.note ?? "", by: "gm" };
+  // Only combatants count. Heroes can be in a fight's data just for a milestone or level-up recorded after it.
+  const fought = (m) => !!m.combatantId;
+  const all = Object.values(meta);
+  const pool = all.some(fought) ? all.filter(fought) : all;
+  const heroes = pool.filter((m) => m.type === "hero");
+  const foes = pool.filter((m) => m.type && m.type !== "hero");
+  const targets = foes.some(isMajor) ? foes.filter(isMajor) : foes;
+  if (heroes.length && heroes.every(isOut)) return { result: "defeat", reason: "every hero is dead or insane", by: "auto" };
+  if (targets.length && targets.every(isOut)) return { result: "victory", reason: foes.some(isMajor) ? "every major adversary is down" : "every adversary is down", by: "auto" };
+  return { result: "undecided", reason: "both sides still had fighters standing when combat ended", by: "auto" };
+}
+
+/**
+ * Aggregate records into stats.
+ * @param {object} [options]
+ * @param {object} [options.outcome]  A GM override for the fight result: {result, note}.
+ */
+export function aggregate(records, meta = {}, { outcome = null } = {}) {
   const stats = {};
   const S = (key) => (stats[key] ??= { key, ...blank() });
   const side = (key) => (meta[key]?.type === "hero" ? "hero" : meta[key]?.type ? "adversary" : "unknown");
@@ -228,9 +293,9 @@ export function aggregate(records, meta = {}) {
   const turnsSeen = new Set();
 
   for (const r of records) {
-    if (r.kind === "initiative") { const s = S(r.actor); s.initiativeTotal += r.total ?? 0; s.initiativeRolls++; s.positionTotal += r.position; addDice(s, r.dice, r); continue; }
+    if (r.kind === "initiative") { const s = S(r.actor); s.initiativeTotal += r.total ?? 0; s.initiativeRolls++; s.positionTotal += r.position; continue; }
     if (r.kind === "check") {
-      const s = S(r.actor); s.checks++; addDice(s, r.dice, r);
+      const s = S(r.actor); s.checks++; addRoll(s.checkRolls, r);
       if (r.success) s.checkSuccesses++; if (r.critSuccess) s.checkCrits++; if (r.critFailure) s.checkFumbles++;
       if (r.dc !== null) { s.marginTotal += r.total - r.dc; s.marginCount++; }
       const b = (s.checksBySkill[r.skill] ??= { checks: 0, successes: 0 }); b.checks++; if (r.success) b.successes++;
@@ -239,6 +304,8 @@ export function aggregate(records, meta = {}) {
     if (r.kind === "milestone") { S(r.actor).milestones += r.amount; continue; }
     if (r.kind === "attunement") { const s = S(r.actor); s.attunementPoints += r.amount; s.attunementRanks += r.ranksGained ?? 0; const a = (s.attunements[r.attunement] ??= { points: 0, rank: null }); a.points += r.amount; a.rank = r.rank ?? a.rank; continue; }
     if (r.kind === "levelUp") { const s = S(r.actor); s.levelsGained += r.amount; s.level = Math.max(s.level ?? 0, r.level ?? 0) || null; continue; }
+    if (r.kind === "condition") { const s = S(r.actor); if (r.on) s.conditions[r.status] = (s.conditions[r.status] ?? 0) + 1; continue; }
+    if (r.kind === "note") continue;
     if (r.kind === "heroism") { const s = S(r.actor); if (r.reason === "combatEnd") s.heroismLostAtEnd += r.amount; else if (r.amount > 0) s.heroismGained += r.amount; continue; }
     if (r.kind !== "action") continue;
 
@@ -256,7 +323,7 @@ export function aggregate(records, meta = {}) {
     for (const a of r.attacks) {
       const t = S(a.target);
       s.attacks++; t.attacksReceived++;
-      addDice(s, a.dice, a);
+      addRoll(s.combatRolls, a);
       if (a.dc !== null && a.total !== null) { s.marginTotal += a.total - a.dc; s.marginCount++; }
       if (a.critSuccess) s.crits++; if (a.critFailure) s.fumbles++;
       const dmg = Math.max(0, a.health) + Math.max(0, a.wounds);
@@ -268,7 +335,17 @@ export function aggregate(records, meta = {}) {
       s.moraleDamageDealt += Math.max(0, a.morale); t.moraleDamageTaken += Math.max(0, a.morale);
       s.woundsDealt += Math.max(0, a.wounds); t.woundsTaken += Math.max(0, a.wounds);
       s.biggestHit = Math.max(s.biggestHit, dmg);
+      // Damage per hit: health plus wounds, over the attacks that dealt any.
+      if (dmg > 0) addRoll(s.hitDamage, { total: dmg, dc: null });
       if (dmg > 0) (ledger[a.target] ??= []).push({ by: r.actor, amount: dmg, round: r.round });
+    }
+
+    // Healing spells: not attacks, so they stay out of hit rates, combat rolls and the kill ledger.
+    for (const h of r.heals ?? []) {
+      const gain = h.health + h.morale;
+      s.healCasts++;
+      if (gain > 0) { s.healSuccesses++; s.healingDone += gain; S(h.target).healingReceived += gain; }
+      if (h.critSuccess) s.healCrits++;
     }
 
     for (const e of r.effects) {
@@ -290,7 +367,7 @@ export function aggregate(records, meta = {}) {
     const total = Object.values(share).reduce((a, b) => a + b, 0);
     const top = Object.entries(share).sort((a, b) => b[1] - a[1])[0][0];
     const kind = Object.keys(share).length === 1 ? "solo" : share[finisher] >= share[top] ? "earned" : "stolen";
-    kills.push({ target, targetName: meta[target]?.name, important: !!meta[target]?.important, by: finisher, round: hits.at(-1).round, kind, topDamage: top, share: Object.fromEntries(Object.entries(share).map(([k, v]) => [k, { damage: v, percent: Math.round((v / total) * 100) }])) });
+    kills.push({ target, targetName: meta[target]?.name, important: isMajor(meta[target]), by: finisher, round: hits.at(-1).round, kind, topDamage: top, share: Object.fromEntries(Object.entries(share).map(([k, v]) => [k, { damage: v, percent: Math.round((v / total) * 100) }])) });
     const f = S(finisher); f.kills++;
     if (kind === "solo") f.killsSolo++; if (kind === "earned") f.killsEarned++; if (kind === "stolen") f.killsStolen++;
     for (const k of Object.keys(share)) if (k !== finisher) S(k).assists++;
@@ -301,28 +378,33 @@ export function aggregate(records, meta = {}) {
   // Derived values.
   for (const s of Object.values(stats)) {
     const m = meta[s.key] ?? {};
-    Object.assign(s, { name: m.name ?? s.key, side: side(s.key), important: !!m.important });
+    Object.assign(s, { name: m.name ?? s.key, side: side(s.key), important: !!m.important, major: isMajor(m), rank: m.rank ?? null, finalState: m.state ?? null, finalStatuses: m.statuses ?? [], out: isOut(m) });
     s.hitRate = s.attacks ? (s.hits + s.glances) / s.attacks : null;
     s.cleanHitRate = s.attacks ? s.hits / s.attacks : null;
     s.critRate = s.attacks ? s.crits / s.attacks : null;
     s.checkSuccessRate = s.checks ? s.checkSuccesses / s.checks : null;
     s.avgInitiative = s.initiativeRolls ? s.initiativeTotal / s.initiativeRolls : null;
     s.avgPosition = s.initiativeRolls ? s.positionTotal / s.initiativeRolls : null;
-    s.luck = s.dice.count ? s.dice.luckSum / s.dice.count : null;
-    s.ones = s.dice.ones;
+    finishRolls(s.combatRolls);
+    finishRolls(s.checkRolls);
+    finishRolls(s.hitDamage);
     s.avgMargin = s.marginCount ? s.marginTotal / s.marginCount : null;
     s.mvp = mvpScore(s);
   }
 
-  const heroes = Object.values(stats).filter((s) => s.side === "hero").sort((a, b) => b.mvp - a.mvp);
+  // Heroes who took part: in the combat, or acted, rolled or were attacked. Not those only given a milestone afterwards.
+  const tookPart = (s) => !!meta[s.key]?.combatantId || s.actions || s.initiativeRolls || s.checks || s.attacksReceived;
+  const heroes = Object.values(stats).filter((s) => s.side === "hero" && tookPart(s)).sort((a, b) => b.mvp - a.mvp);
   const adversaryRows = Object.values(stats).filter((s) => s.side === "adversary");
-  const majors = adversaryRows.filter((s) => s.important);
-  const rollup = rollUp(adversaryRows.filter((s) => !s.important), "Adversaries");
+  const majors = adversaryRows.filter((s) => s.major);
+  const rollup = rollUp(adversaryRows.filter((s) => !s.major), "Adversaries");
   const rounds = Math.max(0, ...records.map((r) => r.round ?? 0));
 
   return {
     heroes, majorAdversaries: majors, adversaries: rollup, combatants: stats, kills,
     party: rollUp(heroes, "Party"),
+    outcome: fightOutcome(meta, outcome),
+    notes: records.filter((r) => r.kind === "note").map((r) => ({ actor: r.actor ? meta[r.actor]?.name ?? r.actor : null, text: r.text })),
     summary: { rounds, mvp: heroes[0]?.key ?? null, heroKills: kills.filter((k) => side(k.by) === "hero").length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroes.reduce((a, s) => a + s.deaths, 0) },
     timeline: timeline(records, meta, kills)
   };
@@ -333,7 +415,7 @@ export function mvpScore(s) {
   return s.damageDealt + s.moraleDamageDealt + s.woundsDealt * 3 + s.killsSolo * 10 + s.killsEarned * 8 + s.killsStolen * 4 + s.assists * 3 + s.healingDone + s.buffs * 3 - s.deaths * 10;
 }
 
-const SUM_FIELDS = ["initiativeTotal", "initiativeRolls", "positionTotal", "marginTotal", "marginCount", "turns", "actions", "attacks", "hits", "glances", "misses", "crits", "fumbles", "damageDealt", "moraleDamageDealt", "woundsDealt", "attacksReceived", "avoided", "damageTaken", "moraleDamageTaken", "woundsTaken", "kills", "killsEarned", "killsStolen", "killsSolo", "assists", "deaths", "healingDone", "healingReceived", "buffs", "spellsCast", "focusSpent", "focusRestored", "refocuses", "heroismSpent", "heroismGained", "heroismLostAtEnd", "milestones", "levelsGained", "attunementPoints", "attunementRanks", "apSpent", "feetMoved", "moves", "checks", "checkSuccesses", "checkCrits", "checkFumbles", "boons", "banes", "rollsWithBoons", "rollsWithBanes"];
+const SUM_FIELDS = ["initiativeTotal", "initiativeRolls", "positionTotal", "marginTotal", "marginCount", "turns", "actions", "attacks", "hits", "glances", "misses", "crits", "fumbles", "damageDealt", "moraleDamageDealt", "woundsDealt", "attacksReceived", "avoided", "damageTaken", "moraleDamageTaken", "woundsTaken", "kills", "killsEarned", "killsStolen", "killsSolo", "assists", "deaths", "healingDone", "healingReceived", "healCasts", "healSuccesses", "healCrits", "buffs", "spellsCast", "focusSpent", "focusRestored", "refocuses", "heroismSpent", "heroismGained", "heroismLostAtEnd", "milestones", "levelsGained", "attunementPoints", "attunementRanks", "apSpent", "feetMoved", "moves", "checks", "checkSuccesses", "checkCrits", "checkFumbles"];
 
 /** Sum a set of combatant stats into one row (used for the party and for minion adversaries). */
 export function rollUp(rows, name) {
@@ -345,11 +427,9 @@ export function rollUp(rows, name) {
   out.avgInitiative = out.initiativeRolls ? out.initiativeTotal / out.initiativeRolls : null;
   out.avgPosition = out.initiativeRolls ? out.positionTotal / out.initiativeRolls : null;
   out.avgMargin = out.marginCount ? out.marginTotal / out.marginCount : null;
-  out.dice = blankDice();
-  for (const s of rows) {
-    for (const [size, b] of Object.entries(s.dice?.sizes ?? {})) for (const [f, n] of Object.entries(b.faces)) tallyDie(out.dice, [Number(size), Number(f)], n);
-  }
-  out.luck = out.dice.count ? out.dice.luckSum / out.dice.count : null; out.ones = out.dice.ones;
+  out.combatRolls = mergeRolls(rows.map((s) => s.combatRolls));
+  out.checkRolls = mergeRolls(rows.map((s) => s.checkRolls));
+  out.hitDamage = mergeRolls(rows.map((s) => s.hitDamage));
   out.feetEstimated = rows.some((s) => s.feetEstimated);
   const avoidedBy = {};
   for (const s of rows) for (const [k, v] of Object.entries(s.avoidedBy ?? {})) avoidedBy[k] = (avoidedBy[k] ?? 0) + v;
@@ -363,9 +443,14 @@ export function timeline(records, meta, kills) {
   const killAt = new Map(kills.map((k) => [k.target, k]));
   const lines = [];
   for (const r of records) {
+    if (r.kind === "condition") { if (r.on) lines.push({ round: r.round, condition: r.status, text: `${name(r.actor)} is ${r.status === "dead" ? "dead" : r.status}` }); continue; }
     if (r.kind === "check") { lines.push({ round: r.round, text: `${name(r.actor)} rolls ${r.skill} ${r.total} vs DC ${r.dc}: ${r.critSuccess ? "critical success" : r.critFailure ? "critical failure" : r.success ? "success" : "failure"}` }); continue; }
     if (r.kind !== "action") continue;
     if (r.move) { lines.push({ round: r.round, text: `${name(r.actor)} moves${r.move.feet ? ` ${r.move.feet} ft${r.move.estimated ? " (est.)" : ""}` : ""}` }); continue; }
+    if (r.heals?.length) {
+      for (const h of r.heals) lines.push({ round: r.round, text: `${name(r.actor)} ${r.actionName} → ${name(h.target)}: ${h.health + h.morale > 0 ? `heals ${h.health + h.morale}` : "no healing"}${h.critSuccess ? " CRIT" : ""}` });
+      continue;
+    }
     if (r.attacks.length) {
       for (const a of r.attacks) {
         const k = killAt.get(a.target);
@@ -388,7 +473,7 @@ export function fightFromExport(d, { id = d.combat?._id ?? "imported", name = nu
   const rounds = {};
   for (const a of Object.values(d.actors ?? {})) {
     meta[a.tokenId] = {
-      key: a.tokenId, name: a.name, type: a.type, important: !!a.important, actorId: a.actorId,
+      key: a.tokenId, name: a.name, tokenName: a.tokenName ?? null, type: a.type, important: !!a.important, actorId: a.actorId,
       combatantId: a.combatantId, linked: a.type === "hero", dead: (a.statuses ?? []).includes("dead") || !!a.defeated,
       owners: [], img: null
     };

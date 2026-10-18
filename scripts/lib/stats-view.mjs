@@ -20,8 +20,9 @@ export function leaderboards(heroes) {
     { id: "support", label: "Cheerleader", hint: "Most buffs and inspiring actions", value: (s) => s.buffs, show: (v) => `${v} buffs` },
     { id: "mover", label: "Road Runner", hint: "Most feet moved", value: (s) => s.feetMoved, show: (v, s) => `${v} ft${s.feetEstimated ? " (est.)" : ""}` },
     { id: "speed", label: "First Off the Line", hint: "Best average turn position", value: (s) => (s.avgPosition === null ? null : -s.avgPosition), show: (v) => `#${num(-v, 1)} avg` },
-    { id: "lucky", label: "Hot Dice", hint: "Luckiest rolls for the size of each die (50% is average)", value: (s) => (s.dice.count >= 3 ? s.luck : null), show: (v) => `${pct(v)} luck` },
-    { id: "unlucky", label: "Snake Eyes", hint: "Most natural 1s rolled", value: (s) => s.ones, show: (v) => `${v} × 1s` }
+    { id: "lucky", label: "Hot Hand", hint: "Highest average attack total, at least 3 attacks", value: (s) => (s.combatRolls.count >= 3 ? s.combatRolls.avg : null), show: (v) => `${num(v, 1)} avg attack` },
+    { id: "unlucky", label: "Butterfingers", hint: "Most critical failures on attacks", value: (s) => s.combatRolls.critFailures, show: (v) => `${v} crit fails` },
+    { id: "skilled", label: "Know-It-All", hint: "Best skill check success rate, at least 2 checks", value: (s) => (s.checkRolls.successes + s.checkRolls.failures >= 2 ? s.checkRolls.successRate : null), show: (v) => pct(v) }
   ];
   const out = [];
   for (const b of boards) {
@@ -44,17 +45,58 @@ export function rankOf(heroes, key, value) {
   return i === -1 ? null : { rank: i + 1, of: vals.length };
 }
 
-/**
- * One face histogram per die size rolled, smallest die first. Boons and banes change die sizes,
- * so faces from different sizes are never mixed. Bar widths are a percentage of that die's most common face.
- */
-export function diceBars(dice) {
-  return Object.entries(dice?.sizes ?? {}).map(([size, b]) => {
-    const counts = Array.from({ length: Number(size) }, (_, i) => b.faces[i + 1] ?? 0);
-    const max = Math.max(1, ...counts);
-    return { size: Number(size), count: b.count, bars: counts.map((n, i) => ({ face: i + 1, count: n, width: Math.round((n / max) * 100) })) };
-  }).sort((a, b) => a.size - b.size);
-}
-
 /** Escape text for safe use in HTML. */
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[c]);
+
+const RESULT_LABEL = { victory: "Victory", defeat: "Defeat", withdrawn: "Withdrawn", undecided: "Undecided" };
+
+/**
+ * How a combatant's fight ended, in words: for major adversaries and heroes on the dashboard and in the Roll of Valour.
+ * @param {object} s       Combatant stats from aggregate().
+ * @param {object} stats   The whole aggregate() result, for kills and the fight result.
+ */
+export function fateLine(s, stats) {
+  const killed = stats.kills.find((k) => k.target === s.key);
+  const st = s.finalState;
+  const wounds = st?.wounds?.max ? ` with ${st.wounds.value} of ${st.wounds.max} wounds` : "";
+  const kills = s.kills ? `, ${s.kills} kill${s.kills === 1 ? "" : "s"}` : "";
+  if (killed) return `Defeated by ${stats.combatants[killed.by]?.name ?? "?"} in round ${killed.round ?? "?"}`;
+  if (s.finalStatuses?.includes("dead")) return "Dead";
+  if (s.finalStatuses?.includes("insane")) return `Insane${wounds}`;
+  if (s.side === "adversary" && stats.outcome?.result === "defeat") return `Victorious${st?.health?.value === 0 ? `: fought on at 0 health${wounds}` : ""}${kills}`;
+  if (st?.health && st.health.value === 0) return `Still fighting at 0 health${wounds}${kills}`;
+  if (st?.health) return `Standing at ${st.health.value} of ${st.health.max} health${kills}`;
+  return s.out ? "Down" : "Survived";
+}
+
+/**
+ * The Roll of Valour page for one fight, as HTML: result, MVP, heroes, major adversaries, kills, conditions and notes.
+ * @param {object} stats  aggregate() result.
+ * @param {object} fight  The stored fight: {name, scene, started, ended}.
+ */
+export function fightReport(stats, fight) {
+  const o = stats.outcome ?? { result: "undecided", reason: "" };
+  const date = fight.started ? new Date(fight.started).toLocaleDateString() : "";
+  const mvp = stats.combatants[stats.summary.mvp];
+  const row = (cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`;
+  const heroRows = stats.heroes.map((s) => row([esc(s.name), s.damageDealt + s.woundsDealt, `${s.kills}${s.killsStolen ? ` (${s.killsStolen} stolen)` : ""}`, s.healingDone, s.damageTaken + s.woundsTaken, esc(fateLine(s, stats))])).join("");
+  const majors = stats.majorAdversaries.map((s) => `<li><strong>${esc(s.name)}</strong>${s.rank ? ` (${esc(s.rank)})` : ""}: ${esc(fateLine(s, stats))}. Dealt ${s.damageDealt + s.woundsDealt}, took ${s.damageTaken + s.woundsTaken}.</li>`).join("");
+  const kills = stats.kills.map((k) => `<li>Round ${k.round ?? "?"}: ${esc(stats.combatants[k.by]?.name)} ${k.kind === "stolen" ? "stole the kill on" : k.kind === "solo" ? "killed" : "finished"} ${esc(k.targetName)}${k.important ? " ★" : ""}</li>`).join("");
+  const conditions = stats.timeline.filter((l) => ["broken", "insane", "dead", "frightened"].includes(l.condition)).map((l) => `<li>Round ${l.round ?? "?"}: ${esc(l.text)}</li>`).join("");
+  const notes = (stats.notes ?? []).map((n) => `<li>${n.actor ? `<strong>${esc(n.actor)}</strong>: ` : ""}${esc(n.text)}</li>`).join("");
+  const boards = leaderboards(stats.heroes).slice(0, 6).map((b) => `<li><strong>${esc(b.label)}</strong>: ${esc(b.name)} (${esc(b.value)})</li>`).join("");
+  return [
+    `<h2>${esc(fight.name)}</h2>`,
+    `<p><em>${esc(fight.scene ?? "")}${date ? ` · ${esc(date)}` : ""} · ${stats.summary.rounds} rounds</em></p>`,
+    `<h3>Result: ${RESULT_LABEL[o.result] ?? esc(o.result)}</h3>`,
+    o.reason ? `<p>${esc(o.reason)}${o.by === "gm" ? " (GM ruling)" : ""}</p>` : "",
+    mvp ? `<p><strong>MVP:</strong> ${esc(mvp.name)}</p>` : "",
+    `<h3>Heroes</h3><table><thead><tr><th>Hero</th><th>Damage</th><th>Kills</th><th>Healing</th><th>Taken</th><th>Fate</th></tr></thead><tbody>${heroRows}</tbody></table>`,
+    majors ? `<h3>Major adversaries</h3><ul>${majors}</ul>` : "",
+    `<p>Other adversaries: ${stats.adversaries.members} (${stats.adversaries.damageDealt + stats.adversaries.woundsDealt} damage dealt, ${stats.adversaries.kills} kills).</p>`,
+    kills ? `<h3>Kills</h3><ul>${kills}</ul>` : "",
+    conditions ? `<h3>Broken, insane and fallen</h3><ul>${conditions}</ul>` : "",
+    boards ? `<h3>Honours</h3><ul>${boards}</ul>` : "",
+    notes ? `<h3>Notes</h3><ul>${notes}</ul>` : ""
+  ].filter(Boolean).join("\n");
+}
