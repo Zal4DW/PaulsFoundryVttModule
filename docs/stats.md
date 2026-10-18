@@ -86,6 +86,18 @@ game.modules.get("pauls-foundry-module").api.importFight("path/to/export.json", 
 
 The path is relative to Foundry's Data folder. Importing again with the same id replaces that fight.
 
+## Importing chat history
+
+A world that installed the module late can read its past chat log into the stats. As a GM, type `/stats import` in chat. A dialog lists the fights and out-of-combat days it found, and the module saves them only when you confirm.
+
+- **Fights.** Each Crucible "Initiative - Round N" report names its combat, so every combat becomes one fight. Action cards and checks after a report belong to that combat until 10 minutes pass with no action card. A noncombat card, such as Recover, ends it.
+- **Out of combat.** Everything else goes to that day's session bucket, as live recording would. An existing bucket is added to.
+- **No doubles.** Cards already in the stats log are skipped, so running the import again adds nothing.
+- **Names and deaths.** Old tokens may be gone, so names come from the cards: speakers, targets and initiative rows. Same-named creatures are matched to their initiative rows in the order they first act. An adversary counts as dead when the health damage it took reaches its maximum health; heroes are never inferred dead. The fight result follows from that, and a GM can change it with `setFightOutcome`.
+- **Limits.** Move distances, Heroism held at the end of a fight, and conditions are not on the cards, so imported fights don't have them.
+
+Macros can call `api.importHistory({ since, until, dryRun })`. `since` and `until` are timestamps in milliseconds. `dryRun` defaults to `true`, which only reports what the import would add.
+
 ## Code
 
 - `scripts/lib/stats.mjs`: turns messages into records and records into stats. No Foundry globals, so Vitest tests it against the Day One fixture.
