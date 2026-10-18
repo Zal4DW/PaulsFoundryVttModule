@@ -74,6 +74,12 @@ describe("stats to date", () => {
     expect(s.kills.find((k) => k.fightName === "Day One" && s.combatants[k.target].name === "Zarajah")).toBeTruthy();
   });
 
+  it("does not count the out-of-combat bucket as a fight for a major adversary", () => {
+    const withBoss = { ...session, meta: { ...session.meta, B9: foe("B9", "Orivech", { rank: "boss", combatantId: undefined }) }, records: [...session.records, { kind: "check", actor: "B9", skill: "arcana", total: 10, dc: 12, success: false }] };
+    const s2 = aggregateToDate([dayOne, dayTwo, withBoss]);
+    expect(s2.majorAdversaries.find((m) => m.name === "Orivech").fights).toBe(2);
+  });
+
   it("leaves out heroes who only rested outside combat", () => {
     const rest = { kind: "action", actor: "R1", round: null, actionId: "rest", tags: [], spent: {}, restored: {}, effects: [], heals: [], attacks: [] };
     const rested = aggregateToDate([dayOne, { ...session, meta: { ...session.meta, R1: hero("R1", "bella", { name: "Belladonna", combatantId: undefined }) }, records: [...session.records, rest] }]);

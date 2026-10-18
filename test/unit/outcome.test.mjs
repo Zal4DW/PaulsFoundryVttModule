@@ -88,6 +88,15 @@ describe("conditions, fates and the Roll of Valour page", () => {
   });
 });
 
+describe("kill log order", () => {
+  it("lists kills by the round they happened, not by who was hit first", () => {
+    const hit = (actor, target, round, health) => ({ kind: "action", actor, round, actionId: "strike", tags: [], spent: {}, restored: {}, effects: [], heals: [], attacks: [{ target, total: 15, dc: 10, result: "hit", health, wounds: 0, morale: 0 }] });
+    const meta = { H: hero("H"), X: foe("X", { dead: true }), Y: foe("Y", { dead: true }) };
+    const s = aggregate([hit("H", "X", 1, 5), hit("H", "Y", 2, 9), hit("H", "X", 3, 9)], meta);
+    expect(s.kills.map((k) => [k.targetName, k.round])).toEqual([["Y", 2], ["X", 3]]);
+  });
+});
+
 describe("healing yourself", () => {
   const elixir = (actor, target) => ({ kind: "action", actor, round: 3, actionId: "healingElixir", tags: ["consume", "healing"], spent: { action: 2 }, restored: {}, attacks: [], heals: [], effects: [{ target, type: "other", health: 12 }] });
   const touch = (actor, target) => ({ kind: "action", actor, round: 3, actionId: "spell.life.touch", tags: ["spell"], spent: { action: 2, focus: 1 }, restored: {}, attacks: [], effects: [], heals: [{ target, health: 14, morale: 0 }] });

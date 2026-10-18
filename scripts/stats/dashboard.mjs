@@ -137,7 +137,8 @@ export class StatsDashboard extends ApplicationV2 {
       <tr class="pfm-total"><td>${esc(L("Party"))}</td>${cols.map(([, f]) => `<td>${f(party)}</td>`).join("")}</tr>
       <tr class="pfm-foe"><td>${esc(L("Adversaries"))}</td>${cols.map(([, f]) => `<td>${f(adversaries)}</td>`).join("")}</tr>
     </tbody></table>`;
-    const killList = `<h3>${esc(L("KillLog"))}</h3><ul class="pfm-kills">${kills.map((k) => {
+    const legend = kills.length ? `<p class="pfm-note pfm-kill-legend"><strong>${esc(L("Kill.solo"))}</strong>: ${esc(L("KillLegend.solo"))} · <strong>${esc(L("Kill.earned"))}</strong>: ${esc(L("KillLegend.earned"))} · <strong>${esc(L("Kill.stolen"))}</strong>: ${esc(L("KillLegend.stolen"))} · <i class="fa-solid fa-star"></i> ${esc(L("KillLegend.major"))}<br><span class="pfm-share finisher">&nbsp;</span> ${esc(L("KillLegend.finisher"))} <span class="pfm-share">&nbsp;</span> ${esc(L("KillLegend.assist"))}</p>` : "";
+    const killList = `<h3>${esc(L("KillLog"))}</h3>${legend}<ul class="pfm-kills">${kills.map((k) => {
       const bars = Object.entries(k.share).sort((a, b) => b[1].damage - a[1].damage).map(([key, v]) => `<span class="pfm-share ${key === k.by ? "finisher" : ""}" style="flex:${v.percent}" data-tooltip="${esc(stats.combatants[key]?.name)}: ${v.damage} (${v.percent}%)">${esc(stats.combatants[key]?.name)} ${v.percent}%</span>`).join("");
       return `<li><span class="pfm-kill-head">${k.fightName ? `${esc(k.fightName)} · ` : ""}R${k.round ?? "?"} · <strong>${esc(stats.combatants[k.by]?.name)}</strong> ${esc(L(`Kill.${k.kind}`))} <strong>${esc(k.targetName)}</strong>${k.important ? ` <i class="fa-solid fa-star" data-tooltip="${esc(L("Major"))}"></i>` : ""}</span><div class="pfm-sharebar">${bars}</div></li>`;
     }).join("")}</ul>`;
@@ -197,13 +198,34 @@ export class StatsDashboard extends ApplicationV2 {
   /* ---------- Adversaries ---------- */
 
   #adversaries(stats) {
-    const row = (s, label) => `<tr><td>${esc(label ?? s.name)}${s.members ? ` <small>×${s.members}</small>` : ""}</td><td>${s.attacks}</td><td>${pct(s.hitRate)}</td><td>${s.damageDealt + s.woundsDealt}</td><td>${s.kills}</td><td>${s.damageTaken}</td><td>${s.woundsTaken}</td><td>${s.feetMoved}${s.feetEstimated ? "*" : ""}</td></tr>`;
-    const head = `<tr><th></th>${["Attacks", "HitRate", "Damage", "Kills", "Taken", "Wounds", "Feet"].map((k) => `<th>${esc(L(`Col.${k}`))}</th>`).join("")}</tr>`;
-    const majors = stats.majorAdversaries.map((s) => {
-      const fate = fateLine(s, stats);
-      return `<div class="pfm-major"><h4><i class="fa-solid fa-star"></i> ${esc(s.name)}${s.rank ? ` <small>${esc(s.rank)}</small>` : ""}</h4><p>${esc(fate)}</p><table class="pfm-table">${head}${row(s)}</table></div>`;
-    }).join("");
-    return `<h3>${esc(L("Adversaries"))}</h3><table class="pfm-table">${head}${row(stats.adversaries, L("Minions"))}</table>${majors ? `<h3>${esc(L("Majors"))}</h3>${majors}` : ""}`;
+    // One card per major adversary, then one for the rolled-up rest. Each card: header, fate, end-state bars, stat grid.
+    const stat = (key, value) => `<div><span>${value}</span><label data-tooltip="${esc(L(`Hint.${key}`))}">${esc(L(`Col.${key}`))}</label></div>`;
+    const grid = (s) => `<div class="pfm-adv-stats">
+      ${stat("Attacks", s.attacks)}${stat("HitRate", pct(s.hitRate))}${stat("Damage", s.damageDealt + s.woundsDealt)}${stat("Kills", s.kills)}
+      ${stat("Taken", s.damageTaken + s.woundsTaken)}${stat("Wounds", s.woundsTaken)}${stat("DmgPerHit", s.hitDamage?.count ? num(s.hitDamage.avg, 1) : "–")}${stat("Feet", `${s.feetMoved}${s.feetEstimated ? "*" : ""}`)}
+    </div>`;
+    const bar = (label, res, cls) => {
+      if (!res?.max) return "";
+      const p = Math.max(0, Math.min(100, Math.round((res.value / res.max) * 100)));
+      return `<div class="pfm-adv-bar ${cls}" data-tooltip="${esc(label)}: ${res.value} / ${res.max}"><span style="width:${p}%"></span><em>${esc(label)} ${res.value}/${res.max}</em></div>`;
+    };
+    const card = (s) => {
+      const st = s.finalState;
+      const chips = [s.rank ? `<span class="pfm-chip">${esc(s.rank)}</span>` : "", s.fights ? `<span class="pfm-chip">${esc(s.fights === 1 ? L("FightsCountOne") : L("FightsCount", { n: s.fights }))}</span>` : ""].join("");
+      return `<article class="pfm-adv-card ${s.out ? "pfm-adv-down" : "pfm-adv-standing"}">
+        <header><i class="fa-solid fa-star"></i><h4>${esc(s.name)}</h4>${chips}</header>
+        <p class="pfm-adv-fate">${esc(fateLine(s, stats))}</p>
+        ${bar(L("Health"), st?.health, "health")}${bar(L("Col.Wounds"), st?.wounds?.value ? st.wounds : null, "wounds")}
+        ${grid(s)}
+      </article>`;
+    };
+    const rest = stats.adversaries;
+    const restCard = rest.members ? `<article class="pfm-adv-card pfm-adv-minions">
+        <header><i class="fa-solid fa-users"></i><h4>${esc(L("Minions"))}</h4><span class="pfm-chip">×${rest.members}</span></header>
+        ${grid(rest)}
+      </article>` : "";
+    const cards = stats.majorAdversaries.map(card).join("") + restCard;
+    return cards ? `<div class="pfm-adv-grid">${cards}</div>` : `<div class="pfm-empty">${esc(L("NoAdversaries"))}</div>`;
   }
 
   /* ---------- Roll of Valour: the write-up for this fight ---------- */

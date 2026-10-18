@@ -378,6 +378,8 @@ export function aggregate(records, meta = {}, { outcome = null } = {}) {
     S(target).deaths++;
   }
   for (const [key, m] of Object.entries(meta)) if (m.dead && !kills.some((k) => k.target === key)) S(key).deaths++;
+  // The ledger is keyed by target, so kills come out in no useful order. List them as they happened.
+  kills.sort((a, b) => (a.round ?? Infinity) - (b.round ?? Infinity));
 
   // Derived values.
   for (const s of Object.values(stats)) {
@@ -515,7 +517,8 @@ export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } 
         const key = `major:${s.name}`;
         keyMap[s.key] = key;
         const g = majors.get(key) ?? { key, name: s.name, rows: [], fights: 0, last: null };
-        g.rows.push(s); g.last = s; g.fights++;
+        g.rows.push(s); g.last = s;
+        if (combat) g.fights++; // The out-of-combat bucket is not a fight, for adversaries as for heroes.
         majors.set(key, g);
       } else {
         keyMap[s.key] = `${f.id}:${s.key}`;

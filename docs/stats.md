@@ -21,7 +21,8 @@ Open it with `/stats` in chat, or from a macro with `game.modules.get("pauls-fou
 
 - **Party.** Scoreboard, MVP, leaderboards, a stat table per hero with party and adversary totals, and the kill log.
 - **My Hero.** One hero's stats with their rank in the party, misses by defence, skill checks, roll totals and progression. A player sees their assigned character first.
-- **Adversaries.** Ordinary adversaries rolled up into one row. Major adversaries (Crucible's "important" flag, the star on the sheet) get their own rows and their fate.
+- **Adversaries.** A grid of cards. Each major adversary (marked important, or ranked boss or elite) gets a card with its rank, fate, end-of-fight health and wounds bars, and eight stats. A red left edge means it was defeated; gold means it survived. Ordinary adversaries share one rolled-up card.
+- **Kill log** (on the Party view). Kills in round order. "Killed" means only the killer damaged the target, "finished" means the killer did the most damage, and "stole the kill on" means someone else did more. ★ marks a major adversary. The bar under each kill shows everyone's share of the damage, with the finishing blow in orange. A legend under the heading repeats this.
 - **Play-by-Play.** Every action, check and kill, grouped by round.
 
 ## To date
