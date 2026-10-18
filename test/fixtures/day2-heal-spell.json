@@ -1,0 +1,8 @@
+{
+  "note": "Kagura's Ray of Life on Agnath, Day Two round 2 (pfm-test). A Life spell is rolled as an AttackRoll and marked restoration.",
+  "message": {"_id":"nl9YEdSWVddFsfh4","timestamp":1792317443480,"speaker":{"scene":"jExUw9bjtj7qx2gW","token":"pYzcfw69nnTAD75G","actor":"z8PYWkq3bxce7vwb","alias":"Kagura"},"flags":{"crucible":{"action":{"id":"spell.life.ray","tags":["spell","composed"]},"actor":"Actor.z8PYWkq3bxce7vwb","events":[{"type":"activation","target":"Actor.z8PYWkq3bxce7vwb","resources":[{"resource":"action","delta":-4},{"resource":"focus","delta":-1}],"effects":[]},{"type":"actorUpdate","target":"Actor.z8PYWkq3bxce7vwb","resources":[],"effects":[],"actorUpdates":{"items":[],"system":{"status":{"lastAction":"spell.life.ray","hasCast":true}}},"itemSnapshots":[]},{"type":"spell","target":"Actor.iPMperuo6ZvBLnp9","resources":[{"resource":"health","delta":16,"damageType":"poison","restoration":true}],"effects":[],"rollIndex":0,"isCriticalSuccess":true}],"confirmed":true}},"rolls":["{\"class\":\"AttackRoll\",\"total\":22,\"terms\":[{\"class\":\"Die\",\"faces\":8,\"results\":[{\"result\":8,\"active\":true}]},{\"class\":\"Die\",\"faces\":8,\"results\":[{\"result\":7,\"active\":true}]},{\"class\":\"Die\",\"faces\":8,\"results\":[{\"result\":4,\"active\":true}]}],\"data\":{\"result\":7,\"dc\":12,\"actorId\":\"z8PYWkq3bxce7vwb\",\"damageType\":\"poison\",\"restoration\":true,\"resource\":\"health\"}}"]},
+  "meta": {
+    "pYzcfw69nnTAD75G": {"key":"pYzcfw69nnTAD75G","name":"Kagura","type":"hero","actorId":"z8PYWkq3bxce7vwb","linked":true},
+    "agnathToken": {"key":"agnathToken","name":"Agnath","type":"hero","actorId":"iPMperuo6ZvBLnp9","linked":true}
+  }
+}

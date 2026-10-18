@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Local Foundry server data (worlds, systems, logs, cached release)
+.foundry/
+
+# Real credentials. Only the example file is committed.
+secrets/*
+!secrets/foundry.example.json
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

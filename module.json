@@ -3,7 +3,7 @@
   "title": "Paul's Foundry Module",
   "description": "Hello-world framework module: settings, chat interaction and UI hooks. Works with any system, including Crucible.",
   "version": "0.1.0",
-  "compatibility": { "minimum": "13", "verified": "13" },
+  "compatibility": { "minimum": "13", "verified": "14" },
   "authors": [{ "name": "Zal4DW" }],
   "esmodules": ["scripts/main.mjs"],
   "styles": ["styles/module.css"],

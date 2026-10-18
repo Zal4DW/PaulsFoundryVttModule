@@ -1,0 +1,22 @@
+{
+  "name": "pauls-foundry-module",
+  "private": true,
+  "type": "module",
+  "description": "Dev tooling for Paul's Foundry Module. Not part of the module package.",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "foundry:up": "node tools/foundry-init.mjs && docker compose up --detach",
+    "foundry:down": "docker compose down",
+    "foundry:logs": "docker compose logs --follow foundry"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "vitest": "^5.0.5"
+  }
+}
