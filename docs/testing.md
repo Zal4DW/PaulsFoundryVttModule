@@ -90,6 +90,16 @@ node tools/patch-crucible-tongs.mjs .foundry/data/Data
 
 Point it at any Foundry `Data` folder, including your real game server's. It keeps a `.orig` copy of each file it changes, does nothing on a second run, and reports "Nothing to patch" on a Tongs version without the problem. A Tongs update replaces the files, so run it again after updating, then reload Foundry. This dev server's copy is already patched.
 
+### Ember Item Sync patch
+
+Ember Item Sync 0.0.1 rewrites each token's weapon layers on every client, when a scene loads, when a token is created, and when combat or equipment changes. A player who does not own a token gets `User <name> lacks permission to update Token [...]` in the console, once per token, every time Ember spawns NPCs (Begin Event on a vista). The GM's write still lands, so only the errors show. `tools/patch-ember-item-sync.mjs` makes `syncToken` run on the active GM only:
+
+```bash
+node tools/patch-ember-item-sync.mjs .foundry/data/Data
+```
+
+Like the Tongs patch, it keeps a `.orig` copy, does nothing on a second run, and must be run again after an Ember Item Sync update. This dev server's copy is already patched.
+
 Tongs replaces Foundry's macro hotbar while it shows a character, and its Macro tab holds the same 50 macro slots. To see both bars, turn on "Keep Foundry's Hotbar with Crucible Tongs" in this module's settings. It is a per-user setting and is off by default.
 
 ## Daily loop
