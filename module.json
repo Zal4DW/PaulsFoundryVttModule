@@ -1,8 +1,8 @@
 {
   "id": "pauls-foundry-module",
   "title": "Paul's Foundry Module",
-  "description": "Hello-world framework module: settings, chat interaction and UI hooks. Works with any system, including Crucible.",
-  "version": "0.1.0",
+  "description": "Fight and session stats with a dashboard and Roll of Valour journal, party and character shortcuts, and a grip toggle for Crucible's Versatile weapons. Works with any system; the stats and grip toggle are made for Crucible.",
+  "version": "0.2.0",
   "compatibility": { "minimum": "13", "verified": "14" },
   "authors": [{ "name": "Zal4DW" }],
   "esmodules": ["scripts/main.mjs"],
@@ -13,5 +13,5 @@
   },
   "url": "https://github.com/Zal4DW/PaulsFoundryVttModule",
   "manifest": "https://github.com/Zal4DW/PaulsFoundryVttModule/releases/latest/download/module.json",
-  "download": "https://github.com/Zal4DW/PaulsFoundryVttModule/releases/latest/download/module.zip"
+  "download": "https://github.com/Zal4DW/PaulsFoundryVttModule/releases/download/v0.2.0/module.zip"
 }
