@@ -288,6 +288,21 @@ const isHealingAction = (r) => r.tags.includes("healing") || /heal|bloom|mend|re
 /** A major adversary: marked important, or ranked boss or elite. Major adversaries are listed on their own. */
 export const isMajor = (m) => !!m?.important || ["boss", "elite"].includes(m?.rank);
 
+/**
+ * True when a non-hero fights for the party: a member of the party group (Ember adds its companions this way),
+ * a token set to Friendly, or an actor flagged as a hero's companion. Crucible has no companion actor type,
+ * so companions are adversary actors.
+ */
+export const isAlly = ({ type, partyMember = false, friendly = false, companion = false }) => !!type && type !== "hero" && (partyMember || friendly || companion);
+
+/** Which side a key is on: "hero", "ally" (a companion), "adversary", "hazard" or "unknown". */
+export function sideOf(key, m) {
+  if (isHazardKey(key)) return "hazard";
+  if (!m?.type) return "unknown";
+  if (m.type === "hero") return "hero";
+  return m.ally ? "ally" : "adversary";
+}
+
 /** A combatant out of the fight: dead, insane, or (for minions and ordinary adversaries) defeated. */
 const isOut = (m) => !!m?.dead || (m?.statuses ?? []).some((x) => x === "dead" || x === "insane");
 
@@ -303,7 +318,7 @@ export function fightOutcome(meta, override = null) {
   const all = Object.values(meta);
   const pool = all.some(fought) ? all.filter(fought) : all;
   const heroes = pool.filter((m) => m.type === "hero");
-  const foes = pool.filter((m) => m.type && m.type !== "hero");
+  const foes = pool.filter((m) => sideOf(m.key ?? "", m) === "adversary"); // companions never decide a result
   const targets = foes.some(isMajor) ? foes.filter(isMajor) : foes;
   if (heroes.length && heroes.every(isOut)) return { result: "defeat", reason: "every hero is dead or insane", by: "auto" };
   if (targets.length && targets.every(isOut)) return { result: "victory", reason: foes.some(isMajor) ? "every major adversary is down" : "every adversary is down", by: "auto" };
@@ -318,7 +333,7 @@ export function fightOutcome(meta, override = null) {
 export function aggregate(records, meta = {}, { outcome = null } = {}) {
   const stats = {};
   const S = (key) => (stats[key] ??= { key, ...blank() });
-  const side = (key) => (isHazardKey(key) ? "hazard" : meta[key]?.type === "hero" ? "hero" : meta[key]?.type ? "adversary" : "unknown");
+  const side = (key) => sideOf(key, meta[key]);
   const hazards = hazardNames(records);
 
   // Damage ledger per target, in order, for kill attribution.
@@ -434,18 +449,21 @@ export function aggregate(records, meta = {}, { outcome = null } = {}) {
   // Heroes who took part: in the combat, or acted, rolled or were attacked. Not those only given a milestone afterwards.
   const tookPart = (s) => !!meta[s.key]?.combatantId || s.actions || s.initiativeRolls || s.checks || s.attacksReceived;
   const heroes = Object.values(stats).filter((s) => s.side === "hero" && tookPart(s)).sort((a, b) => b.mvp - a.mvp);
+  const allies = Object.values(stats).filter((s) => s.side === "ally" && tookPart(s)).sort((a, b) => b.mvp - a.mvp);
+  const onParty = (key) => ["hero", "ally"].includes(side(key));
   const adversaryRows = Object.values(stats).filter((s) => s.side === "adversary");
   const majors = adversaryRows.filter((s) => s.major);
   const rollup = rollUp(adversaryRows.filter((s) => !s.major), "Adversaries");
   const rounds = Math.max(0, ...records.map((r) => r.round ?? 0));
 
   return {
-    heroes, majorAdversaries: majors, adversaries: rollup, combatants: stats, kills,
+    heroes, allies, majorAdversaries: majors, adversaries: rollup, combatants: stats, kills,
     hazards: Object.values(stats).filter((s) => s.side === "hazard"),
     party: rollUp(heroes, "Party"),
     outcome: fightOutcome(meta, outcome),
     notes: records.filter((r) => r.kind === "note").map((r) => ({ actor: r.actor ? meta[r.actor]?.name ?? r.actor : null, text: r.text })),
-    summary: { rounds, mvp: heroes[0]?.key ?? null, heroKills: kills.filter((k) => side(k.by) === "hero").length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroes.reduce((a, s) => a + s.deaths, 0) },
+    // Party kills include the companions' kills.
+    summary: { rounds, mvp: heroes[0]?.key ?? null, heroKills: kills.filter((k) => onParty(k.by)).length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroes.reduce((a, s) => a + s.deaths, 0) },
     timeline: timeline(records, meta, kills)
   };
 }
@@ -518,6 +536,7 @@ export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } 
   const combats = ordered.filter(isCombatFight);
   const latest = combats.at(-1)?.id ?? null;
   const heroes = new Map();
+  const allies = new Map();
   const majors = new Map();
   const minions = [];
   const names = {};
@@ -549,6 +568,16 @@ export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } 
       h.last = s;
       if (combat) { h.fights++; h.record[stats.outcome.result]++; h.lastFight = f.id; }
       heroes.set(key, h);
+    }
+    // Companions merge by actor, like heroes.
+    for (const s of stats.allies) {
+      const m = meta[s.key] ?? {};
+      const key = m.actorId ? `ally:${m.actorId}` : `ally:${s.name}`;
+      keyMap[s.key] = key;
+      const g = allies.get(key) ?? { key, name: s.name, rows: [], fights: 0, last: null };
+      g.rows.push(s); g.last = s;
+      if (combat) g.fights++;
+      allies.set(key, g);
     }
     for (const s of Object.values(stats.combatants)) {
       if (s.side !== "adversary") continue;
@@ -593,20 +622,24 @@ export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } 
     side: "adversary", major: true, important: g.rows.some((s) => s.important), rank: g.last?.rank ?? null, fights: g.fights,
     finalState: g.last?.finalState ?? null, finalStatuses: g.last?.finalStatuses ?? [], out: !!g.last?.out
   }));
+  const allyRows = [...allies.values()].map((g) => Object.assign(mergeCombatant(g.rows, g.key, g.name), {
+    side: "ally", fights: g.fights, finalState: g.last?.finalState ?? null, finalStatuses: g.last?.finalStatuses ?? [], out: !!g.last?.out
+  })).sort((a, b) => b.mvp - a.mvp);
   const combatants = { ...names };
-  for (const s of [...heroRows, ...majorRows]) combatants[s.key] = s;
+  for (const s of [...heroRows, ...allyRows, ...majorRows]) combatants[s.key] = s;
   const side = (key) => combatants[key]?.side;
+  const onParty = (key) => ["hero", "ally"].includes(side(key));
 
   return {
     toDate: true,
-    heroes: heroRows, majorAdversaries: majorRows, adversaries: rollUp(minions, "Adversaries"), combatants, kills,
+    heroes: heroRows, allies: allyRows, majorAdversaries: majorRows, adversaries: rollUp(minions, "Adversaries"), combatants, kills,
     party: rollUp(heroRows, "Party"),
     outcome: null,
     notes: [],
     fights: fightList,
     sessions,
     results,
-    summary: { fights: fightList.length, sessions: sessions.length, rounds, mvp: heroRows[0]?.key ?? null, heroKills: kills.filter((k) => side(k.by) === "hero").length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroRows.reduce((a, s) => a + s.deaths, 0) },
+    summary: { fights: fightList.length, sessions: sessions.length, rounds, mvp: heroRows[0]?.key ?? null, heroKills: kills.filter((k) => onParty(k.by)).length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroRows.reduce((a, s) => a + s.deaths, 0) },
     timeline: []
   };
 }

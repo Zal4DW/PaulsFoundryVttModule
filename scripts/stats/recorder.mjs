@@ -1,6 +1,6 @@
 // GM-side recorder: turns chat cards into stats records as they happen, and stores them for every user to read.
 // Runs only on the active GM's client, so records are written once.
-import { aggregate, estimateMoves, extractRecords, isHazardKey } from "../lib/stats.mjs";
+import { aggregate, estimateMoves, extractRecords, isAlly, isHazardKey } from "../lib/stats.mjs";
 import { fightReport } from "../lib/stats-view.mjs";
 import { flushLog, readLog, updateLog } from "./store.mjs";
 
@@ -37,10 +37,18 @@ export function metaFor(key, combat = game.combat) {
   const combatant = combat?.combatants.find((c) => c.tokenId === key) ?? null;
   const base = game.actors.get(actor?.id ?? "") ?? actor;
   const owners = game.users.filter((u) => !u.isGM && base?.testUserPermission(u, "OWNER")).map((u) => u.id);
+  // Companions are adversary actors that fight for the party: party members (Ember adds its companions with
+  // addMember), Friendly tokens, or actors this module flagged as a hero's companion.
+  const ally = isAlly({
+    type: actor?.type,
+    partyMember: !!(base && globalThis.crucible?.party?.system?.members?.ids?.has(base.id)),
+    friendly: (tokenDoc?.disposition ?? base?.prototypeToken?.disposition) === CONST.TOKEN_DISPOSITIONS.FRIENDLY,
+    companion: !!base?.getFlag?.("pauls-foundry-module", "companionOf")
+  });
   return {
     // Heroes show their own name. A token can be renamed (Ignis's token was "Anne"), so keep that as a mapping.
     key, name: (actor?.type === "hero" ? base?.name ?? actor.name : tokenDoc?.name ?? actor?.name) ?? key,
-    tokenName: tokenDoc?.name ?? null, type: actor?.type ?? null,
+    tokenName: tokenDoc?.name ?? null, type: actor?.type ?? null, ally,
     important: !!actor?.system?.advancement?.important, rank: actor?.system?.advancement?.rank ?? null, actorId: actor?.id ?? null,
     combatantId: combatant?.id ?? null, linked: tokenDoc ? !!tokenDoc.actorLink : true,
     dead: !!(actor?.statuses?.has("dead") || combatant?.isDefeated), owners,

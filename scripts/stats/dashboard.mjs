@@ -141,6 +141,7 @@ export class StatsDashboard extends ApplicationV2 {
     ]; // skill checks have their own table below
     const table = `<table class="pfm-table"><thead><tr><th>${esc(L("Hero"))}</th>${cols.map(([k]) => `<th data-tooltip="${esc(L(`Hint.${k}`))}">${esc(L(`Col.${k}`))}</th>`).join("")}</tr></thead><tbody>
       ${heroes.map((s) => `<tr><td><a data-action="hero" data-key="${esc(s.key)}"${tokenHint(stats, s)}>${esc(s.name)}</a></td>${cols.map(([, f]) => `<td>${f(s)}</td>`).join("")}</tr>`).join("")}
+      ${(stats.allies ?? []).map((s) => `<tr class="pfm-ally" data-tooltip="${esc(L("CompanionHint"))}"><td>${esc(s.name)} <small>${esc(L("Companion"))}</small></td>${cols.map(([, f]) => `<td>${f(s)}</td>`).join("")}</tr>`).join("")}
       <tr class="pfm-total"><td>${esc(L("Party"))}</td>${cols.map(([, f]) => `<td>${f(party)}</td>`).join("")}</tr>
       <tr class="pfm-foe"><td>${esc(L("Adversaries"))}</td>${cols.map(([, f]) => `<td>${f(adversaries)}</td>`).join("")}</tr>
     </tbody></table>`;
