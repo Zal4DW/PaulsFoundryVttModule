@@ -51,6 +51,7 @@ The engine is `aggregateToDate` in `scripts/lib/stats.mjs`.
 | Earned kill | The killer did the most damage to the target, tied or outright. |
 | Stolen kill | Someone else did more damage, and the killer landed the last blow. |
 | Assist | Damage on a target that someone else killed. |
+| Heal | Health and morale restored to allies. Healing yourself, such as drinking your own potion, counts as healing received, not healing done. A heal spell cast on yourself still counts as a cast. |
 | Avg pos | Average place in the round's initiative order. 1 is first. |
 | Heroism | Gained / spent. The bracketed value was lost when combat ended. |
 | Rolls | Totals in two groups, kept apart: combat (attack rolls) and skill checks. Each group has average, lowest, highest, successes, failures, critical successes and critical failures. Die faces are not tracked. A roll with no DC counts toward the average but not toward successes or failures. |

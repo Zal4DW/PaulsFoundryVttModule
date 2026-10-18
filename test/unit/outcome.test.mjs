@@ -88,6 +88,23 @@ describe("conditions, fates and the Roll of Valour page", () => {
   });
 });
 
+describe("healing yourself", () => {
+  const elixir = (actor, target) => ({ kind: "action", actor, round: 3, actionId: "healingElixir", tags: ["consume", "healing"], spent: { action: 2 }, restored: {}, attacks: [], heals: [], effects: [{ target, type: "other", health: 12 }] });
+  const touch = (actor, target) => ({ kind: "action", actor, round: 3, actionId: "spell.life.touch", tags: ["spell"], spent: { action: 2, focus: 1 }, restored: {}, attacks: [], effects: [], heals: [{ target, health: 14, morale: 0 }] });
+  const meta = { K: hero("K"), C: hero("C"), F: hero("F"), T: hero("T") };
+
+  it("counts a potion drunk on yourself as healing received, not healing done", () => {
+    const s = aggregate([elixir("K", "K"), elixir("C", "F")], meta).combatants;
+    expect([s.K.healingDone, s.K.healingReceived]).toEqual([0, 12]);
+    expect([s.C.healingDone, s.F.healingReceived]).toEqual([12, 12]);
+  });
+
+  it("counts a healing spell on yourself as received, but still as a successful cast", () => {
+    const s = aggregate([touch("T", "T"), touch("T", "F")], meta).combatants;
+    expect([s.T.healingDone, s.T.healingReceived, s.T.healCasts, s.T.healSuccesses]).toEqual([14, 14, 2, 2]);
+  });
+});
+
 describe("heroes who were not in the fight", () => {
   it("leaves out a hero recorded only for a milestone, from the heroes and the result", () => {
     const meta = { A: hero("A", { combatantId: "c1", dead: true }), Z: hero("Z"), X: foe("X", { combatantId: "c2", rank: "elite" }) };

@@ -344,13 +344,17 @@ export function aggregate(records, meta = {}, { outcome = null } = {}) {
     for (const h of r.heals ?? []) {
       const gain = h.health + h.morale;
       s.healCasts++;
-      if (gain > 0) { s.healSuccesses++; s.healingDone += gain; S(h.target).healingReceived += gain; }
+      if (gain > 0) { s.healSuccesses++; if (h.target !== r.actor) s.healingDone += gain; S(h.target).healingReceived += gain; }
       if (h.critSuccess) s.healCrits++;
     }
 
     for (const e of r.effects) {
       const gain = Math.max(0, e.health ?? 0) + Math.max(0, e.morale ?? 0);
-      if (gain && e.target) { if (e.target !== r.actor || isHealingAction(r)) { s.healingDone += gain; S(e.target).healingReceived += gain; } }
+      // Healing an ally is healing done. A healing action on yourself (a potion you drink) is only healing received.
+      if (gain && e.target) {
+        if (e.target !== r.actor) { s.healingDone += gain; S(e.target).healingReceived += gain; }
+        else if (isHealingAction(r)) s.healingReceived += gain;
+      }
       if (e.heroism > 0) S(e.target).heroismGained += e.heroism;
     }
     if (!r.attacks.length && r.effects.some((e) => e.target && e.target !== r.actor) && !r.effects.some((e) => (e.health ?? 0) > 0)) s.buffs++;
