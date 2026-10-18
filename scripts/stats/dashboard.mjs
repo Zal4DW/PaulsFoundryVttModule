@@ -169,7 +169,12 @@ export class StatsDashboard extends ApplicationV2 {
     // Attunement awards: any hero with points here, even one who rolled nothing.
     const attuned = Object.values(stats.combatants).filter((s) => s.side === "hero" && s.attunementPoints);
     const attunements = attuned.length ? `<h3>${esc(L("AttunementAwards"))}</h3><ul class="pfm-attunements">${attuned.map((s) => `<li><strong>${esc(s.name)}</strong> ${Object.entries(s.attunements).map(([k, v]) => `<span class="pfm-chip pass">${esc(k)} +${v.points}</span>`).join(" ")}</li>`).join("")}</ul>` : "";
-    return banner + score + this.#checks(stats) + attunements;
+    // Hazards that hit the party (Caustic Slime, Kaleidoscopic Disorientation), and conditions the heroes picked up.
+    const hazards = (stats.hazards ?? []).map((h) => `<li><strong>${esc(h.name)}</strong> ${esc(L("HazardLine", { hits: h.hits + h.glances, attacks: h.attacks, damage: h.damageDealt + h.moraleDamageDealt + h.woundsDealt }))}</li>`).join("");
+    const hazardList = hazards ? `<h3>${esc(L("Hazards"))}</h3><ul class="pfm-attunements">${hazards}</ul>` : "";
+    const conditioned = Object.values(stats.combatants).filter((s) => s.side === "hero" && Object.keys(s.conditions ?? {}).length);
+    const conditionList = conditioned.length ? `<h3>${esc(L("ConditionsSuffered"))}</h3><ul class="pfm-attunements">${conditioned.map((s) => `<li><strong>${esc(s.name)}</strong> ${Object.entries(s.conditions).map(([k, v]) => `<span class="pfm-chip fail">${esc(k)}${v > 1 ? ` ×${v}` : ""}</span>`).join(" ")}</li>`).join("")}</ul>` : "";
+    return banner + score + this.#checks(stats) + attunements + hazardList + conditionList;
   }
 
   /** Skill checks per hero, with a party row and each skill's passed / rolled. */

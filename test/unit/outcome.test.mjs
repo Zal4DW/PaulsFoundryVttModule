@@ -110,6 +110,30 @@ describe("Ember attunement awards", () => {
   });
 });
 
+describe("hazards", () => {
+  // A Crucible hazard card: no actor, the speaker is "Environment", and the action carries the "hazard" tag.
+  const card = { _id: "h1", timestamp: 1, speaker: { alias: "Environment", actor: null }, rolls: [{ total: 16, data: { dc: 13, result: 2 } }],
+    flags: { crucible: { actor: null, action: { id: "environmentAttack", name: "Caustic Slime", tags: ["hazard", "reflex", "acid", "health"] },
+      targets: [{ actor: "Actor.senna" }], events: [{ type: "activation", target: null, resources: [] },
+        { type: "attack", rollIndex: 0, target: "Actor.senna", resources: [{ resource: "health", delta: -7, damageType: "acid" }] }] } } };
+  const meta = { S: hero("S", { actorId: "senna", name: "Senna" }) };
+
+  it("credits hazard damage to the named hazard, not to nobody", () => {
+    const [rec] = extractRecords([card], { meta });
+    expect(rec).toMatchObject({ kind: "action", actor: "hazard:caustic-slime", hazard: true, actionName: "Caustic Slime" });
+    const s = aggregate([rec], meta);
+    expect(s.hazards.map((h) => [h.name, h.side, h.attacks])).toEqual([["Caustic Slime", "hazard", 1]]);
+    expect(s.combatants.S.attacksReceived).toBe(1);
+    expect(s.adversaries.members).toBe(0); // a hazard is not an adversary
+    expect(s.timeline.at(-1).text).toMatch(/^Caustic Slime Caustic Slime → Senna/);
+  });
+
+  it("counts conditions picked up outside combat", () => {
+    const s = aggregate([{ kind: "condition", actor: "S", status: "blinded", on: true, round: null }, { kind: "check", actor: "S", skill: "medicine", total: 7, dc: 15, success: false }], meta);
+    expect(s.combatants.S.conditions).toEqual({ blinded: 1 });
+  });
+});
+
 describe("kill log order", () => {
   it("lists kills by the round they happened, not by who was hit first", () => {
     const hit = (actor, target, round, health) => ({ kind: "action", actor, round, actionId: "strike", tags: [], spent: {}, restored: {}, effects: [], heals: [], attacks: [{ target, total: 15, dc: 10, result: "hit", health, wounds: 0, morale: 0 }] });

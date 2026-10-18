@@ -1,11 +1,12 @@
 // GM-side recorder: turns chat cards into stats records as they happen, and stores them for every user to read.
 // Runs only on the active GM's client, so records are written once.
-import { aggregate, estimateMoves, extractRecords } from "../lib/stats.mjs";
+import { aggregate, estimateMoves, extractRecords, isHazardKey } from "../lib/stats.mjs";
 import { fightReport } from "../lib/stats-view.mjs";
 import { flushLog, readLog, updateLog } from "./store.mjs";
 
 /** Conditions worth a line in the stats: what a hero or adversary suffered, not every short buff. */
-export const TRACKED_CONDITIONS = ["dead", "insane", "broken", "weakened", "frightened", "enraged", "restrained", "prone", "slowed", "staggered", "incapacitated"];
+export const TRACKED_CONDITIONS = ["dead", "insane", "broken", "weakened", "frightened", "enraged", "restrained", "prone", "slowed", "staggered", "incapacitated",
+  "blinded", "deafened", "disoriented", "exposed", "confused", "diseased", "bleeding", "burning"];
 
 const isRecorder = () => game.user.isGM && game.users.activeGM?.id === game.user.id;
 
@@ -101,7 +102,8 @@ function recordMessage(moduleId, message) {
     const rounds = combat?.started && !(crucible.action?.tags ?? []).includes("noncombat") ? { [message.id]: { round: combat.round, turn: combat.turn } } : {};
     const records = extractRecords([message.toObject()], { meta: fight.meta, rounds, moveFeet: feetForMovement(message) });
     for (const r of records) for (const key of [r.actor, ...(r.attacks ?? []).map((a) => a.target), ...(r.effects ?? []).map((e) => e.target)]) {
-      if (key && !fight.meta[key]) fight.meta[key] = metaFor(key);
+      // Hazards get no metadata: they are not combatants, and fightOutcome would count a typed entry as a foe.
+      if (key && !isHazardKey(key) && !fight.meta[key]) fight.meta[key] = metaFor(key);
     }
     fight.records = fight.records.filter((r) => r.id !== message.id).concat(records);
   });
@@ -131,15 +133,17 @@ function recordProgress(moduleId, actor, kind, amount, level = null, extra = {})
   });
 }
 
-/** Record a tracked condition starting or ending on an actor during combat. */
+/** Record a tracked condition starting or ending on an actor: in the running combat, else in the session bucket. */
 function recordCondition(moduleId, actor, status, on) {
-  const combat = game.combat;
-  if (!combat?.started) return;
-  const key = keyForActor(actor, combat);
+  const combat = game.combat?.started ? game.combat : null;
+  // Outside combat only heroes count (a Kaleidoscope crystal's Blinded, say), not the GM's set dressing.
+  if (!combat && actor?.type !== "hero") return;
+  const key = combat ? keyForActor(actor, combat) : `actor:${actor.id}`;
+  const fightId = currentFightId();
   updateLog(moduleId, (log) => {
-    const fight = (log.fights[combat.id] ??= fightShell(combat.id));
+    const fight = (log.fights[fightId] ??= fightShell(fightId));
     fight.meta[key] ??= metaFor(key);
-    fight.records.push({ id: `condition-${foundry.utils.randomID()}`, ts: Date.now(), round: combat.round, turn: combat.turn, kind: "condition", actor: key, status, on });
+    fight.records.push({ id: `condition-${foundry.utils.randomID()}`, ts: Date.now(), round: combat?.round ?? null, turn: combat?.turn ?? null, kind: "condition", actor: key, status, on });
   });
 }
 
