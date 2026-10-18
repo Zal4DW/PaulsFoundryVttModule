@@ -88,6 +88,28 @@ describe("conditions, fates and the Roll of Valour page", () => {
   });
 });
 
+describe("single skill checks", () => {
+  it("records a check a hero rolls from their own sheet", () => {
+    const msg = { _id: "m1", timestamp: 1, speaker: { actor: "lyra" }, flags: { crucible: { skill: "arcana" } }, rolls: [{ total: 17, data: { actorId: "lyra", dc: 14, criticalSuccessThreshold: 6, criticalFailureThreshold: 6 } }] };
+    const meta = { L: hero("L", { actorId: "lyra", name: "Lyra" }) };
+    const recs = extractRecords([msg], { meta });
+    expect(recs).toHaveLength(1);
+    expect(recs[0]).toMatchObject({ kind: "check", actor: "L", skill: "arcana", total: 17, dc: 14, success: true });
+    expect(aggregate(recs, meta).combatants.L.checksBySkill.arcana).toEqual({ checks: 1, successes: 1 });
+  });
+});
+
+describe("Ember attunement awards", () => {
+  it("records the type and points from Ember's award card, with the hero as speaker", () => {
+    const content = `<section class="attunement-award"><table class="report-table attunement-award-table"><thead><tr><th colspan="2">Akon Attunement</th></tr></thead><tbody><tr><td class="report-label">Progress</td><td class="report-value boons"><i class="fa-solid fa-caret-up" inert></i> +1</td></tr></tbody></table></section>`;
+    const msg = { _id: "a1", timestamp: 1, speaker: { actor: "vex" }, content, flags: { crucible: { isAwardSummary: true }, ember: { attunementAward: true } } };
+    const meta = { V: hero("V", { actorId: "vex", name: "Vex" }) };
+    const recs = extractRecords([msg], { meta });
+    expect(recs).toMatchObject([{ kind: "attunement", actor: "V", attunement: "akon", amount: 1 }]);
+    expect(aggregate(recs, meta).combatants.V.attunements.akon.points).toBe(1);
+  });
+});
+
 describe("kill log order", () => {
   it("lists kills by the round they happened, not by who was hit first", () => {
     const hit = (actor, target, round, health) => ({ kind: "action", actor, round, actionId: "strike", tags: [], spent: {}, restored: {}, effects: [], heals: [], attacks: [{ target, total: 15, dc: 10, result: "hit", health, wounds: 0, morale: 0 }] });

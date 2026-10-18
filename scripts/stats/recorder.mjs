@@ -91,7 +91,7 @@ function feetForMovement(message) {
 /** Turn one chat message into records and store them, replacing earlier records from the same message. */
 function recordMessage(moduleId, message) {
   const crucible = message.flags?.crucible ?? {};
-  const relevant = crucible.action || crucible.groupCheck || crucible.isInitiativeReport;
+  const relevant = crucible.action || crucible.groupCheck || crucible.skill || crucible.isInitiativeReport || message.flags?.ember?.attunementAward;
   if (!relevant) return;
   const fightId = currentFightId();
   updateLog(moduleId, (log) => {
@@ -237,10 +237,8 @@ export function startRecorder(moduleId) {
     for (const [k, path] of Object.entries(WATCHED)) {
       if (foundry.utils.getProperty(change, path) !== undefined) (options.pfmBefore ??= {})[k] = foundry.utils.getProperty(actor, path) ?? 0;
     }
-    // Ember attunements: flags.ember.attunements[type] = {current, rank, awards}. GMs award points; ranks follow.
-    if (foundry.utils.getProperty(change, "flags.ember.attunements") !== undefined) {
-      (options.pfmBefore ??= {}).attunements = foundry.utils.deepClone(actor.getFlag("ember", "attunements") ?? {});
-    }
+    // Ember attunements are recorded from Ember's award chat card (see extractRecords), not from the actor flag:
+    // Ember changes flags.ember.attunements in place before it saves, so this hook never sees the old value.
   });
   Hooks.on("updateActor", (actor, change, options) => {
     if (!isRecorder() || !options.pfmBefore) return;
@@ -248,15 +246,6 @@ export function startRecorder(moduleId) {
     if (options.pfmBefore.heroism !== undefined && game.combat?.started && delta("heroism") > 0) recordHeroism(moduleId, actor, delta("heroism"), "gain");
     if (options.pfmBefore.milestones !== undefined && delta("milestones") > 0) recordProgress(moduleId, actor, "milestone", delta("milestones"));
     if (options.pfmBefore.level !== undefined && delta("level") > 0) recordProgress(moduleId, actor, "levelUp", delta("level"), foundry.utils.getProperty(actor, WATCHED.level));
-    if (options.pfmBefore.attunements) {
-      const now = actor.getFlag("ember", "attunements") ?? {};
-      for (const [type, p] of Object.entries(now)) {
-        const was = options.pfmBefore.attunements[type] ?? {};
-        const gained = (p?.current ?? 0) - (was.current ?? 0);
-        const ranks = (p?.rank ?? 0) - (was.rank ?? 0);
-        if (gained > 0 || ranks > 0) recordProgress(moduleId, actor, "attunement", Math.max(0, gained), null, { attunement: type, rank: p?.rank ?? null, ranksGained: Math.max(0, ranks) });
-      }
-    }
   });
 
   // Conditions come and go as Active Effects carrying status ids.

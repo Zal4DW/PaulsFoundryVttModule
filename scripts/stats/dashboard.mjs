@@ -1,5 +1,5 @@
 // Stats dashboard: party view, player view, adversaries and play-by-play. Read-only for players.
-import { aggregate, aggregateToDate, estimateMoves } from "../lib/stats.mjs";
+import { aggregate, aggregateToDate, estimateMoves, isCombatFight } from "../lib/stats.mjs";
 import { esc, fateLine, fightReport, leaderboards, num, pct, rankOf } from "../lib/stats-view.mjs";
 import { listFights } from "./store.mjs";
 
@@ -18,6 +18,10 @@ const recordText = (r, long = false) => {
   if (long) return L("RecordLong", { won: r.victory ?? 0, lost: r.defeat ?? 0, other });
   return `${r.victory ?? 0}–${r.defeat ?? 0}${other ? ` <small>(+${other})</small>` : ""}`;
 };
+/** A skill's name from the Crucible system, else the id. */
+const skillName = (id) => game.i18n.localize(globalThis.SYSTEM?.SKILLS?.[id]?.label ?? id);
+/** "10 skill checks, 4 passed". */
+const checksText = (g) => L("ChecksSummary", { checks: g?.count ?? 0, passed: g?.successes ?? 0 });
 
 export class StatsDashboard extends ApplicationV2 {
   constructor(moduleId, options = {}) {
@@ -84,6 +88,8 @@ export class StatsDashboard extends ApplicationV2 {
     const records = estimateMoves(foundry.utils.deepClone(fight.records), fight.grid ?? {});
     const stats = aggregate(records, fight.meta, { outcome: fight.outcome });
     stats.meta = fight.meta; // for token names in tooltips
+    stats.session = !isCombatFight(fight); // the out-of-combat bucket: no result, no combat columns
+    if (stats.session && this.tab === "adversaries") this.tab = "party";
     if (!stats.combatants[this.heroKey] || stats.combatants[this.heroKey].side !== "hero") this.heroKey = this.#defaultHero(stats, fight);
     return { fights, fight, stats };
   }
@@ -92,10 +98,10 @@ export class StatsDashboard extends ApplicationV2 {
     const { fights, fight, stats } = context;
     if (!fight) return `<div class="pfm-empty">${esc(L("Empty"))}</div>`;
     const toDate = !!stats.toDate;
-    const tabs = ["party", "player", "adversaries", "plays", "roll"].filter((t) => !(toDate && t === "plays")).map((t) => `<button type="button" class="pfm-tab ${t === this.tab ? "active" : ""}" data-action="view" data-tab="${t}">${esc(L(`Tab.${t}`))}</button>`).join("");
+    const tabs = ["party", "player", "adversaries", "plays", "roll"].filter((t) => !(toDate && t === "plays") && !(stats.session && t === "adversaries")).map((t) => `<button type="button" class="pfm-tab ${t === this.tab ? "active" : ""}" data-action="view" data-tab="${t}">${esc(L(`Tab.${t}`))}</button>`).join("");
     const options = [{ id: TO_DATE, name: L("ToDate") }, ...fights];
     const picker = `<select class="pfm-fight">${options.map((f) => `<option value="${esc(f.id)}" ${f.id === fight.id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select>`;
-    const body = { party: () => this.#party(stats), player: () => this.#player(stats), adversaries: () => this.#adversaries(stats), plays: () => this.#plays(stats), roll: () => (toDate ? this.#fightList(stats) : this.#roll(stats, fight)) }[this.tab]();
+    const body = { party: () => this.#party(stats), player: () => this.#player(stats), adversaries: () => this.#adversaries(stats), plays: () => this.#plays(stats), roll: () => (toDate ? this.#fightList(stats) : stats.session ? this.#checks(stats) + this.#plays(stats) : this.#roll(stats, fight)) }[this.tab]();
     return `<header class="pfm-head">${picker}<nav class="pfm-tabs">${tabs}</nav></header><section class="pfm-body">${body}</section>`;
   }
 
@@ -108,6 +114,7 @@ export class StatsDashboard extends ApplicationV2 {
   /* ---------- Party (group view) ---------- */
 
   #party(stats) {
+    if (stats.session) return this.#sessionParty(stats);
     const { summary, heroes, party, adversaries, kills } = stats;
     const mvp = stats.combatants[summary.mvp];
     const score = `<div class="pfm-score">
@@ -130,8 +137,8 @@ export class StatsDashboard extends ApplicationV2 {
       ["Damage", (s) => s.damageDealt + s.woundsDealt], ["DmgPerHit", (s) => (s.hitDamage.count ? `${num(s.hitDamage.avg, 1)} <small>(${s.hitDamage.min}–${s.hitDamage.max})</small>` : "–")], ["Kills", (s) => `${s.kills}${s.killsStolen ? ` <small>(${s.killsStolen} ${esc(L("Stolen"))})</small>` : ""}`],
       ["Assists", (s) => s.assists], ["Taken", (s) => s.damageTaken + s.woundsTaken], ["Healing", (s) => s.healingDone],
       ["Focus", (s) => s.focusSpent], ["Heroism", (s) => `${s.heroismGained}/${s.heroismSpent}${s.heroismLostAtEnd ? ` <small>(-${s.heroismLostAtEnd})</small>` : ""}`],
-      ["Feet", (s) => `${s.feetMoved}${s.feetEstimated ? "*" : ""}`], ["AvgPos", (s) => num(s.avgPosition, 1)], ["Checks", (s) => `${s.checkRolls.successes}/${s.checkRolls.count}`], ["AvgChk", (s) => num(s.checkRolls.avg, 1)], ["ChkCrits", (s) => `${s.checkRolls.critSuccesses}/${s.checkRolls.critFailures}`]
-    ];
+      ["Feet", (s) => `${s.feetMoved}${s.feetEstimated ? "*" : ""}`], ["AvgPos", (s) => num(s.avgPosition, 1)]
+    ]; // skill checks have their own table below
     const table = `<table class="pfm-table"><thead><tr><th>${esc(L("Hero"))}</th>${cols.map(([k]) => `<th data-tooltip="${esc(L(`Hint.${k}`))}">${esc(L(`Col.${k}`))}</th>`).join("")}</tr></thead><tbody>
       ${heroes.map((s) => `<tr><td><a data-action="hero" data-key="${esc(s.key)}"${tokenHint(stats, s)}>${esc(s.name)}</a></td>${cols.map(([, f]) => `<td>${f(s)}</td>`).join("")}</tr>`).join("")}
       <tr class="pfm-total"><td>${esc(L("Party"))}</td>${cols.map(([, f]) => `<td>${f(party)}</td>`).join("")}</tr>
@@ -144,8 +151,40 @@ export class StatsDashboard extends ApplicationV2 {
     }).join("")}</ul>`;
     const note = heroes.some((s) => s.feetEstimated) ? `<p class="pfm-note">* ${esc(L("FeetEstimated"))}</p>` : "";
     const o = stats.outcome;
-    const banner = stats.toDate ? `<div class="pfm-result pfm-result-todate"><strong>${esc(L("ToDate"))}</strong> · ${esc(recordText(stats.results, true))}</div>` : o ?`<div class="pfm-result pfm-result-${esc(o.result)}"><strong>${esc(L(`Result.${o.result}`))}</strong>${o.reason ? ` · ${esc(o.reason)}` : ""}${o.by === "gm" ? ` <em>(${esc(L("GmRuling"))})</em>` : ""}</div>` : "";
-    return banner + score + awards + table + note + killList;
+    const banner = stats.toDate ? `<div class="pfm-result pfm-result-todate"><strong>${esc(L("ToDate"))}</strong> · ${esc(recordText(stats.results, true))} · ${esc(checksText(party.checkRolls))}</div>` : o ?`<div class="pfm-result pfm-result-${esc(o.result)}"><strong>${esc(L(`Result.${o.result}`))}</strong>${o.reason ? ` · ${esc(o.reason)}` : ""}${o.by === "gm" ? ` <em>(${esc(L("GmRuling"))})</em>` : ""}</div>` : "";
+    const checks = party.checkRolls.count ? this.#checks(stats) : "";
+    return banner + score + awards + table + note + checks + (kills.length || !stats.toDate ? killList : "");
+  }
+
+  /** The party view for an out-of-combat bucket: skill checks only, with no result or combat columns. */
+  #sessionParty(stats) {
+    const g = stats.party.checkRolls;
+    const banner = `<div class="pfm-result pfm-result-session"><strong>${esc(L("OutOfCombat"))}</strong> · ${esc(checksText(g))}</div>`;
+    const score = `<div class="pfm-score">
+      <div><span class="pfm-big">${g.count}</span><label>${esc(L("SkillChecksShort"))}</label></div>
+      <div><span class="pfm-big">${pct(g.successRate)}</span><label>${esc(L("Col.CheckRate"))}</label></div>
+      <div><span class="pfm-big">${num(g.avg, 1)}</span><label>${esc(L("Col.AvgChk"))}</label></div>
+      <div><span class="pfm-big">${g.critSuccesses}/${g.critFailures}</span><label>${esc(L("Col.ChkCrits"))}</label></div>
+    </div>`;
+    // Attunement awards: any hero with points here, even one who rolled nothing.
+    const attuned = Object.values(stats.combatants).filter((s) => s.side === "hero" && s.attunementPoints);
+    const attunements = attuned.length ? `<h3>${esc(L("AttunementAwards"))}</h3><ul class="pfm-attunements">${attuned.map((s) => `<li><strong>${esc(s.name)}</strong> ${Object.entries(s.attunements).map(([k, v]) => `<span class="pfm-chip pass">${esc(k)} +${v.points}</span>`).join(" ")}</li>`).join("")}</ul>` : "";
+    return banner + score + this.#checks(stats) + attunements;
+  }
+
+  /** Skill checks per hero, with a party row and each skill's passed / rolled. */
+  #checks(stats) {
+    const skills = (s) => Object.entries(s.checksBySkill ?? {}).sort((a, b) => b[1].checks - a[1].checks)
+      .map(([k, v]) => `<span class="pfm-chip ${v.successes === v.checks ? "pass" : v.successes ? "" : "fail"}">${esc(skillName(k))} ${v.successes}/${v.checks}</span>`).join(" ") || "–";
+    const cols = [
+      ["Checks", (s) => `${s.checkRolls.successes}/${s.checkRolls.count}`], ["CheckRate", (s) => pct(s.checkRolls.successRate)], ["AvgChk", (s) => num(s.checkRolls.avg, 1)],
+      ["CheckRange", (s) => (s.checkRolls.count ? `${s.checkRolls.min}–${s.checkRolls.max}` : "–")], ["ChkCrits", (s) => `${s.checkRolls.critSuccesses}/${s.checkRolls.critFailures}`], ["Skills", skills]
+    ];
+    const heroes = stats.heroes.filter((s) => s.checkRolls.count);
+    return `<h3>${esc(L("SkillChecksShort"))}</h3><table class="pfm-table pfm-checks"><thead><tr><th>${esc(L("Hero"))}</th>${cols.map(([k]) => `<th data-tooltip="${esc(L(`Hint.${k}`))}">${esc(L(`Col.${k}`))}</th>`).join("")}</tr></thead><tbody>
+      ${heroes.map((s) => `<tr><td><a data-action="hero" data-key="${esc(s.key)}"${tokenHint(stats, s)}>${esc(s.name)}</a></td>${cols.map(([, f]) => `<td>${f(s)}</td>`).join("")}</tr>`).join("")}
+      <tr class="pfm-total"><td>${esc(L("Party"))}</td>${cols.map(([, f]) => `<td>${f(stats.party)}</td>`).join("")}</tr>
+    </tbody></table>`;
   }
 
   /* ---------- Player view ---------- */
@@ -175,12 +214,14 @@ export class StatsDashboard extends ApplicationV2 {
       ${tile(L("Progression"), `${s.milestones} ${esc(L("Milestones"))}${s.levelsGained ? ` · +${s.levelsGained} ${esc(L("Levels"))}` : ""}${s.attunementPoints ? ` · ${s.attunementPoints} ${esc(L("Attunement"))}` : ""}`)}
     </div>`;
     const conds = Object.entries(s.conditions ?? {}).map(([k, v]) => `${k}${v > 1 ? ` ×${v}` : ""}`).join(", ");
-    const fate = stats.toDate
+    const fate = stats.session
+      ? `<strong>${esc(L("OutOfCombat"))}</strong> · ${esc(checksText(s.checkRolls))}`
+      : stats.toDate
       ? `<strong>${esc(L(`Status.${s.status}`))}</strong> · ${esc(L("FightsRecord", { fights: s.fights }))} ${recordText(s.record)}`
       : `<strong>${esc(L("Fate"))}:</strong> ${esc(fateLine(s, stats))}`;
     const fateHtml = `<p class="pfm-fate">${fate}${conds ? ` · ${esc(L("Conditions"))}: ${esc(conds)}` : ""}</p>`;
     const avoided = Object.entries(s.avoidedBy).map(([k, v]) => `<li>${esc(k)}: ${v}</li>`).join("") || `<li>${esc(L("None"))}</li>`;
-    const skills = Object.entries(s.checksBySkill).map(([k, v]) => `<li>${esc(k)}: ${v.successes}/${v.checks}</li>`).join("") || `<li>${esc(L("None"))}</li>`;
+    const skills = Object.entries(s.checksBySkill).map(([k, v]) => `<li>${esc(skillName(k))}:${v.successes}/${v.checks}</li>`).join("") || `<li>${esc(L("None"))}</li>`;
     const row = (label, f) => `<tr><td>${esc(L(label))}</td><td>${f(s.combatRolls)}</td><td>${f(s.checkRolls)}</td></tr>`;
     const rolls = `<div class="pfm-luck"><h3>${esc(L("Rolls"))}</h3><table class="pfm-table">
       <tr><th></th><th>${esc(L("Combat"))}</th><th>${esc(L("SkillChecksShort"))}</th></tr>
@@ -192,6 +233,7 @@ export class StatsDashboard extends ApplicationV2 {
       ${row("CritSuccesses", (g) => g.critSuccesses)}
       ${row("CritFailures", (g) => g.critFailures)}
     </table><p class="pfm-note">${esc(L("AvgMargin"))}: ${num(s.avgMargin, 1)}</p></div>`;
+    if (stats.session) return `${pick}${fateHtml}<div class="pfm-cols"><div><h3>${esc(L("SkillChecks"))}</h3><ul>${skills}</ul></div>${rolls}</div>`;
     return `${pick}${fateHtml}${tiles}<div class="pfm-cols"><div><h3>${esc(L("MissedBecause"))}</h3><ul>${avoided}</ul><h3>${esc(L("SkillChecks"))}</h3><ul>${skills}</ul></div>${rolls}</div>`;
   }
 
@@ -239,15 +281,19 @@ export class StatsDashboard extends ApplicationV2 {
   /* ---------- Roll of Valour to date: every fight and its result ---------- */
 
   #fightList(stats) {
-    const rows = [...stats.fights].reverse().map((f) => `<tr>
+    // Fights and out-of-combat sessions, newest first. A session shows its checks where a fight shows rounds and MVP.
+    const all = [...stats.fights, ...(stats.sessions ?? []).map((x) => ({ ...x, session: true }))].sort((a, b) => (b.started ?? 0) - (a.started ?? 0));
+    const rows = all.map((f) => `<tr class="${f.session ? "pfm-session-row" : ""}">
       <td><a data-action="fight" data-fight="${esc(f.id)}">${esc(f.name)}</a></td>
       <td>${f.started ? esc(new Date(f.started).toLocaleDateString()) : "–"}</td>
-      <td><span class="pfm-result-tag pfm-result-${esc(f.outcome.result)}">${esc(L(`Result.${f.outcome.result}`))}</span></td>
-      <td>${f.rounds}</td><td>${esc(f.mvp ?? "–")}</td><td>${esc(f.heroes.join(", "))}</td></tr>`).join("");
+      ${f.session
+    ? `<td><span class="pfm-result-tag pfm-result-session">${esc(L("OutOfCombat"))}</span></td><td colspan="2">${esc(checksText(f.checks))}</td>`
+    : `<td><span class="pfm-result-tag pfm-result-${esc(f.outcome.result)}">${esc(L(`Result.${f.outcome.result}`))}</span></td><td>${f.rounds}</td><td>${esc(f.mvp ?? "–")}</td>`}
+      <td>${esc(f.heroes.join(", "))}</td></tr>`).join("");
     const head = ["Fight", "Date", "Result", "Rounds", "MVP", "Heroes"].map((k) => `<th>${esc(L(`FightCol.${k}`))}</th>`).join("");
     const journal = game.journal.find((j) => j.getFlag(this.moduleId, "chronicle"));
     const button = journal ? `<p><button type="button" class="pfm-journal" data-action="journal"><i class="fa-solid fa-book-open"></i> ${esc(L("OpenJournal", { name: journal.name }))}</button></p>` : "";
-    return `<div class="pfm-result pfm-result-todate"><strong>${esc(L("ToDate"))}</strong> · ${esc(recordText(stats.results, true))}</div>
+    return `<div class="pfm-result pfm-result-todate"><strong>${esc(L("ToDate"))}</strong> · ${esc(recordText(stats.results, true))} · ${esc(checksText(stats.party.checkRolls))}</div>
       <table class="pfm-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>${button}`;
   }
 
