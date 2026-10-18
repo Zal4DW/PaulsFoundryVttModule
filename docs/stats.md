@@ -24,6 +24,20 @@ Open it with `/stats` in chat, or from a macro with `game.modules.get("pauls-fou
 - **Adversaries.** Ordinary adversaries rolled up into one row. Major adversaries (Crucible's "important" flag, the star on the sheet) get their own rows and their fate.
 - **Play-by-Play.** Every action, check and kill, grouped by round.
 
+## To date
+
+Pick "To date (all fights)" at the top of the fight list to see every recorded fight added up.
+
+- Heroes merge by actor, so a hero keeps one row when their token or token name changes. Two actors with the same name (a pregenerated copy, say) get separate rows, told apart by token name, else by level or a number.
+- The party table gains three columns. **Status** is the hero now: Dead or Insane from the actor, else Active if they are on the party sheet, else Benched. **Fights** counts the combats they took part in. **W–L** is fights won and lost, with undecided or withdrawn fights in brackets.
+- Major adversaries merge by name across fights. Other adversaries are rolled up into one row.
+- The kill log names the fight each kill came from.
+- The Roll of Valour tab lists every fight with its date, result, rounds, MVP and heroes. Click a fight to open it.
+- The out-of-combat bucket for a session (checks rolled outside combat) counts toward a hero's totals but not as a fight.
+- Play-by-Play is hidden here. Open a single fight for it.
+
+The engine is `aggregateToDate` in `scripts/lib/stats.mjs`.
+
 ## Definitions
 
 | Stat | Meaning |

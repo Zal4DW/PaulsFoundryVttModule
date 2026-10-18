@@ -45,6 +45,12 @@
 .pfm-stats .pfm-result-victory { background: rgba(60, 140, 70, 0.35); }
 .pfm-stats .pfm-result-defeat { background: rgba(160, 50, 50, 0.4); }
 .pfm-stats .pfm-result-withdrawn, .pfm-stats .pfm-result-undecided { background: rgba(120, 120, 120, 0.3); }
+.pfm-stats .pfm-result-todate { background: rgba(70, 100, 160, 0.3); }
+.pfm-stats .pfm-result-tag { padding: 0 0.4rem; border-radius: 3px; }
+.pfm-stats .pfm-status { font-size: 0.85em; padding: 0 0.3rem; border-radius: 3px; background: rgba(120, 120, 120, 0.3); }
+.pfm-stats .pfm-status-active { background: rgba(60, 140, 70, 0.4); }
+.pfm-stats .pfm-status-dead { background: rgba(160, 50, 50, 0.45); }
+.pfm-stats .pfm-status-insane { background: rgba(130, 60, 160, 0.45); }
 .pfm-stats .pfm-fate { margin: 0 0 0.5rem; }
 .pfm-stats .pfm-major h4 small { font-weight: normal; text-transform: capitalize; opacity: 0.75; }
 .pfm-stats .pfm-roll table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }

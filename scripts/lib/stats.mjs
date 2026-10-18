@@ -437,6 +437,133 @@ export function rollUp(rows, name) {
   return out;
 }
 
+/** Merge one combatant's rows from several fights into one row, with the per-hero fields rollUp leaves out. */
+function mergeCombatant(rows, key, name) {
+  const out = rollUp(rows, name);
+  out.key = key;
+  delete out.members;
+  out.biggestHit = Math.max(0, ...rows.map((s) => s.biggestHit ?? 0));
+  out.critRate = out.attacks ? out.crits / out.attacks : null;
+  out.checkSuccessRate = out.checks ? out.checkSuccesses / out.checks : null;
+  out.level = Math.max(0, ...rows.map((s) => s.level ?? 0)) || null;
+  out.conditions = {};
+  out.checksBySkill = {};
+  for (const s of rows) {
+    for (const [k, v] of Object.entries(s.conditions ?? {})) out.conditions[k] = (out.conditions[k] ?? 0) + v;
+    for (const [k, v] of Object.entries(s.checksBySkill ?? {})) {
+      const b = (out.checksBySkill[k] ??= { checks: 0, successes: 0 });
+      b.checks += v.checks; b.successes += v.successes;
+    }
+  }
+  out.mvp = mvpScore(out);
+  return out;
+}
+
+/** A fight that came from a combat, not the out-of-combat bucket for one session. */
+export const isCombatFight = (f) => !String(f?.id ?? "").startsWith("session-");
+
+/**
+ * Stats to date: every fight added up. Heroes merge across fights by actor, so a hero keeps one row
+ * when their token changes. Major adversaries merge by name. Other adversaries are rolled up into one row.
+ * @param {object[]} fights  Stored fights: {id, name, started, records, meta, outcome, grid}.
+ * @param {object} [options]
+ * @param {(actorId: string) => string|null} [options.statusOf]  The hero's current status from the world
+ *   ("active", "benched", "dead", "insane"). Without it, or when it returns null, the status comes from the fights.
+ * @param {(records: object[], fight: object) => object[]} [options.prepare]  Adjust a fight's records first (move estimates).
+ */
+export function aggregateToDate(fights, { statusOf = null, prepare = (r) => r } = {}) {
+  const ordered = [...fights].sort((a, b) => (a.started ?? 0) - (b.started ?? 0));
+  const combats = ordered.filter(isCombatFight);
+  const latest = combats.at(-1)?.id ?? null;
+  const heroes = new Map();
+  const majors = new Map();
+  const minions = [];
+  const names = {};
+  const kills = [];
+  const results = { victory: 0, defeat: 0, withdrawn: 0, undecided: 0 };
+  const fightList = [];
+  let rounds = 0;
+
+  for (const f of ordered) {
+    const meta = f.meta ?? {};
+    const stats = aggregate(prepare(f.records ?? [], f), meta, { outcome: f.outcome });
+    const combat = isCombatFight(f);
+    if (combat) {
+      results[stats.outcome.result] = (results[stats.outcome.result] ?? 0) + 1;
+      rounds += stats.summary.rounds;
+      fightList.push({ id: f.id, name: f.name, started: f.started ?? null, outcome: stats.outcome, rounds: stats.summary.rounds, mvp: stats.combatants[stats.summary.mvp]?.name ?? null, heroes: stats.heroes.map((s) => s.name) });
+    }
+    // Map this fight's keys to the to-date keys.
+    const keyMap = {};
+    for (const s of stats.heroes) {
+      const m = meta[s.key] ?? {};
+      const key = m.actorId ? `actor:${m.actorId}` : s.key;
+      keyMap[s.key] = key;
+      const h = heroes.get(key) ?? { key, actorId: m.actorId ?? null, name: s.name, tokenName: m.tokenName ?? null, rows: [], fights: 0, record: { victory: 0, defeat: 0, withdrawn: 0, undecided: 0 }, last: null, lastFight: null };
+      h.rows.push(s);
+      h.last = s;
+      if (combat) { h.fights++; h.record[stats.outcome.result]++; h.lastFight = f.id; }
+      heroes.set(key, h);
+    }
+    for (const s of Object.values(stats.combatants)) {
+      if (s.side !== "adversary") continue;
+      if (s.major) {
+        const key = `major:${s.name}`;
+        keyMap[s.key] = key;
+        const g = majors.get(key) ?? { key, name: s.name, rows: [], fights: 0, last: null };
+        g.rows.push(s); g.last = s; g.fights++;
+        majors.set(key, g);
+      } else {
+        keyMap[s.key] = `${f.id}:${s.key}`;
+        names[keyMap[s.key]] = { key: keyMap[s.key], name: s.name, side: "adversary" };
+        minions.push(s);
+      }
+    }
+    const remap = (k) => keyMap[k] ?? `${f.id}:${k}`;
+    for (const k of stats.kills) {
+      for (const key of [k.by, k.target]) names[remap(key)] ??= { key: remap(key), name: stats.combatants[key]?.name ?? meta[key]?.name ?? key, side: stats.combatants[key]?.side ?? "unknown" };
+      kills.push({ ...k, by: remap(k.by), target: remap(k.target), topDamage: remap(k.topDamage), fightId: f.id, fightName: f.name, share: Object.fromEntries(Object.entries(k.share).map(([key, v]) => [remap(key), v])) });
+    }
+  }
+
+  const statusFromFights = (h) => {
+    const st = h.last?.finalStatuses ?? [];
+    if (st.includes("dead")) return "dead";
+    if (st.includes("insane")) return "insane";
+    return h.lastFight === latest ? "active" : "benched";
+  };
+  const heroRows = [...heroes.values()].map((h) => Object.assign(mergeCombatant(h.rows, h.key, h.name), {
+    side: "hero", actorId: h.actorId, tokenName: h.tokenName, fights: h.fights, record: h.record,
+    status: (h.actorId && statusOf?.(h.actorId)) || statusFromFights(h),
+    finalState: h.last?.finalState ?? null, finalStatuses: h.last?.finalStatuses ?? [], out: !!h.last?.out
+  })).filter((s) => s.fights > 0 || s.checks > 0).sort((a, b) => b.mvp - a.mvp); // a Rest outside combat is not taking part
+  // Two actors with one name (a pregenerated copy, say): tell them apart by token name, else by level.
+  const clashes = () => new Set(heroRows.map((s) => s.name).filter((n, i, all) => all.indexOf(n) !== i));
+  let shared = clashes();
+  for (const s of heroRows) if (shared.has(s.name) && s.tokenName && s.tokenName !== s.name) s.name = s.tokenName;
+  shared = clashes();
+  for (const name of shared) heroRows.filter((s) => s.name === name).slice(1).forEach((s, i) => { s.name = `${name} (${s.level ? `L${s.level}` : i + 2})`; });
+  const majorRows = [...majors.values()].map((g) => Object.assign(mergeCombatant(g.rows, g.key, g.name), {
+    side: "adversary", major: true, important: g.rows.some((s) => s.important), rank: g.last?.rank ?? null, fights: g.fights,
+    finalState: g.last?.finalState ?? null, finalStatuses: g.last?.finalStatuses ?? [], out: !!g.last?.out
+  }));
+  const combatants = { ...names };
+  for (const s of [...heroRows, ...majorRows]) combatants[s.key] = s;
+  const side = (key) => combatants[key]?.side;
+
+  return {
+    toDate: true,
+    heroes: heroRows, majorAdversaries: majorRows, adversaries: rollUp(minions, "Adversaries"), combatants, kills,
+    party: rollUp(heroRows, "Party"),
+    outcome: null,
+    notes: [],
+    fights: fightList,
+    results,
+    summary: { fights: fightList.length, rounds, mvp: heroRows[0]?.key ?? null, heroKills: kills.filter((k) => side(k.by) === "hero").length, adversaryKills: kills.filter((k) => side(k.by) === "adversary").length, heroDeaths: heroRows.reduce((a, s) => a + s.deaths, 0) },
+    timeline: []
+  };
+}
+
 /** Play-by-play lines, grouped by round. */
 export function timeline(records, meta, kills) {
   const name = (k) => meta[k]?.name ?? k;

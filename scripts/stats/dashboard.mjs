@@ -1,15 +1,23 @@
 // Stats dashboard: party view, player view, adversaries and play-by-play. Read-only for players.
-import { aggregate, estimateMoves } from "../lib/stats.mjs";
+import { aggregate, aggregateToDate, estimateMoves } from "../lib/stats.mjs";
 import { esc, fateLine, fightReport, leaderboards, num, pct, rankOf } from "../lib/stats-view.mjs";
 import { listFights } from "./store.mjs";
 
 const { ApplicationV2 } = foundry.applications.api;
+/** The fight picker's value for the to-date view. */
+const TO_DATE = "__toDate__";
 /** A tooltip naming the token, when a hero's token has a different name. */
 const tokenHint = (stats, s) => {
-  const token = stats.meta?.[s.key]?.tokenName;
+  const token = s.tokenName ?? stats.meta?.[s.key]?.tokenName;
   return token && token !== s.name ? ` data-tooltip="${esc(game.i18n.format("PFM.Stats.TokenName", { token }))}"` : "";
 };
 const L = (key, data) => (data ? game.i18n.format(`PFM.Stats.${key}`, data) : game.i18n.localize(`PFM.Stats.${key}`));
+/** Wins and losses: "1–3" in a table cell, or "1 won, 3 lost, 1 undecided" in a banner. */
+const recordText = (r, long = false) => {
+  const other = (r.undecided ?? 0) + (r.withdrawn ?? 0);
+  if (long) return L("RecordLong", { won: r.victory ?? 0, lost: r.defeat ?? 0, other });
+  return `${r.victory ?? 0}–${r.defeat ?? 0}${other ? ` <small>(+${other})</small>` : ""}`;
+};
 
 export class StatsDashboard extends ApplicationV2 {
   constructor(moduleId, options = {}) {
@@ -28,11 +36,13 @@ export class StatsDashboard extends ApplicationV2 {
     actions: {
       view: StatsDashboard.#onView,
       hero: StatsDashboard.#onHero,
+      fight: StatsDashboard.#onFight,
       journal: StatsDashboard.#onJournal
     }
   };
 
   static #onView(_event, target) { this.tab = target.dataset.tab; this.render(); }
+  static #onFight(_event, target) { this.fightId = target.dataset.fight; this.heroKey = null; this.tab = "party"; this.render(); }
   static #onJournal() { game.modules.get(this.moduleId).api.openChronicle(); }
   static #onHero(_event, target) { this.heroKey = target.dataset.key; this.tab = "player"; this.render(); }
 
@@ -40,13 +50,34 @@ export class StatsDashboard extends ApplicationV2 {
   #defaultHero(stats, fight) {
     const heroes = stats.heroes;
     if (game.user.isGM) return heroes[0]?.key ?? null;
-    const mine = heroes.find((s) => fight.meta[s.key]?.actorId === game.user.character?.id)
-      ?? heroes.find((s) => (fight.meta[s.key]?.owners ?? []).includes(game.user.id));
+    const actorOf = (s) => s.actorId ?? fight?.meta?.[s.key]?.actorId;
+    const mine = heroes.find((s) => actorOf(s) === game.user.character?.id)
+      ?? heroes.find((s) => game.actors.get(actorOf(s))?.isOwner);
     return mine?.key ?? heroes[0]?.key ?? null;
+  }
+
+  /** A hero's status now: dead or insane from the actor, else active in the party or benched. */
+  static #statusOf(actorId) {
+    const actor = game.actors.get(actorId);
+    if (!actor) return null;
+    if (actor.statuses.has("dead")) return "dead";
+    if (actor.statuses.has("insane")) return "insane";
+    const members = globalThis.crucible?.party?.system?.members;
+    if (!Array.isArray(members)) return null;
+    return members.some((m) => (m.actor?.id ?? m.actorId) === actorId) ? "active" : "benched";
   }
 
   async _prepareContext() {
     const fights = listFights(this.moduleId);
+    if (this.fightId === TO_DATE && fights.length) {
+      const stats = aggregateToDate(fights, {
+        statusOf: (id) => StatsDashboard.#statusOf(id),
+        prepare: (records, f) => estimateMoves(foundry.utils.deepClone(records), f.grid ?? {})
+      });
+      if (this.tab === "plays") this.tab = "party";
+      if (!stats.combatants[this.heroKey] || stats.combatants[this.heroKey].side !== "hero") this.heroKey = this.#defaultHero(stats, null);
+      return { fights, fight: { id: TO_DATE, name: L("ToDate") }, stats };
+    }
     const fight = fights.find((f) => f.id === this.fightId) ?? fights[0] ?? null;
     if (!fight) return { fights, fight: null };
     this.fightId = fight.id;
@@ -60,9 +91,11 @@ export class StatsDashboard extends ApplicationV2 {
   async _renderHTML(context) {
     const { fights, fight, stats } = context;
     if (!fight) return `<div class="pfm-empty">${esc(L("Empty"))}</div>`;
-    const tabs = ["party", "player", "adversaries", "plays", "roll"].map((t) => `<button type="button" class="pfm-tab ${t === this.tab ? "active" : ""}" data-action="view" data-tab="${t}">${esc(L(`Tab.${t}`))}</button>`).join("");
-    const picker = `<select class="pfm-fight">${fights.map((f) => `<option value="${esc(f.id)}" ${f.id === fight.id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select>`;
-    const body = { party: () => this.#party(stats), player: () => this.#player(stats), adversaries: () => this.#adversaries(stats), plays: () => this.#plays(stats), roll: () => this.#roll(stats, fight) }[this.tab]();
+    const toDate = !!stats.toDate;
+    const tabs = ["party", "player", "adversaries", "plays", "roll"].filter((t) => !(toDate && t === "plays")).map((t) => `<button type="button" class="pfm-tab ${t === this.tab ? "active" : ""}" data-action="view" data-tab="${t}">${esc(L(`Tab.${t}`))}</button>`).join("");
+    const options = [{ id: TO_DATE, name: L("ToDate") }, ...fights];
+    const picker = `<select class="pfm-fight">${options.map((f) => `<option value="${esc(f.id)}" ${f.id === fight.id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select>`;
+    const body = { party: () => this.#party(stats), player: () => this.#player(stats), adversaries: () => this.#adversaries(stats), plays: () => this.#plays(stats), roll: () => (toDate ? this.#fightList(stats) : this.#roll(stats, fight)) }[this.tab]();
     return `<header class="pfm-head">${picker}<nav class="pfm-tabs">${tabs}</nav></header><section class="pfm-body">${body}</section>`;
   }
 
@@ -78,6 +111,7 @@ export class StatsDashboard extends ApplicationV2 {
     const { summary, heroes, party, adversaries, kills } = stats;
     const mvp = stats.combatants[summary.mvp];
     const score = `<div class="pfm-score">
+      ${stats.toDate ? `<div><span class="pfm-big">${summary.fights}</span><label>${esc(L("Fights"))}</label></div>` : ""}
       <div><span class="pfm-big">${summary.heroKills}</span><label>${esc(L("PartyKills"))}</label></div>
       <div><span class="pfm-big">${summary.adversaryKills}</span><label>${esc(L("AdversaryKills"))}</label></div>
       <div><span class="pfm-big">${summary.rounds}</span><label>${esc(L("Rounds"))}</label></div>
@@ -85,7 +119,13 @@ export class StatsDashboard extends ApplicationV2 {
       <div class="pfm-mvp"><span class="pfm-big">${esc(mvp?.name ?? "–")}</span><label>${esc(L("MVP"))}</label></div>
     </div>`;
     const awards = `<div class="pfm-awards">${leaderboards(heroes).map((b) => `<div class="pfm-award" data-tooltip="${esc(b.hint)}"><label>${esc(b.label)}</label><strong>${esc(b.name)}</strong><span>${esc(b.value)}</span></div>`).join("")}</div>`;
+    const career = stats.toDate ? [
+      ["Status", (s) => (s.status ? `<span class="pfm-status pfm-status-${esc(s.status)}">${esc(L(`Status.${s.status}`))}</span>` : "–")],
+      ["Fights", (s) => s.fights ?? "–"],
+      ["Record", (s) => (s.record ? recordText(s.record) : "–")]
+    ] : [];
     const cols = [
+      ...career,
       ["Turns", (s) => s.turns], ["Attacks", (s) => s.attacks], ["HitRate", (s) => pct(s.hitRate)], ["Crits", (s) => s.combatRolls.critSuccesses], ["CritFails", (s) => s.combatRolls.critFailures], ["AvgAtk", (s) => num(s.combatRolls.avg, 1)],
       ["Damage", (s) => s.damageDealt + s.woundsDealt], ["DmgPerHit", (s) => (s.hitDamage.count ? `${num(s.hitDamage.avg, 1)} <small>(${s.hitDamage.min}–${s.hitDamage.max})</small>` : "–")], ["Kills", (s) => `${s.kills}${s.killsStolen ? ` <small>(${s.killsStolen} ${esc(L("Stolen"))})</small>` : ""}`],
       ["Assists", (s) => s.assists], ["Taken", (s) => s.damageTaken + s.woundsTaken], ["Healing", (s) => s.healingDone],
@@ -99,11 +139,11 @@ export class StatsDashboard extends ApplicationV2 {
     </tbody></table>`;
     const killList = `<h3>${esc(L("KillLog"))}</h3><ul class="pfm-kills">${kills.map((k) => {
       const bars = Object.entries(k.share).sort((a, b) => b[1].damage - a[1].damage).map(([key, v]) => `<span class="pfm-share ${key === k.by ? "finisher" : ""}" style="flex:${v.percent}" data-tooltip="${esc(stats.combatants[key]?.name)}: ${v.damage} (${v.percent}%)">${esc(stats.combatants[key]?.name)} ${v.percent}%</span>`).join("");
-      return `<li><span class="pfm-kill-head">R${k.round ?? "?"} · <strong>${esc(stats.combatants[k.by]?.name)}</strong> ${esc(L(`Kill.${k.kind}`))} <strong>${esc(k.targetName)}</strong>${k.important ? ` <i class="fa-solid fa-star" data-tooltip="${esc(L("Major"))}"></i>` : ""}</span><div class="pfm-sharebar">${bars}</div></li>`;
+      return `<li><span class="pfm-kill-head">${k.fightName ? `${esc(k.fightName)} · ` : ""}R${k.round ?? "?"} · <strong>${esc(stats.combatants[k.by]?.name)}</strong> ${esc(L(`Kill.${k.kind}`))} <strong>${esc(k.targetName)}</strong>${k.important ? ` <i class="fa-solid fa-star" data-tooltip="${esc(L("Major"))}"></i>` : ""}</span><div class="pfm-sharebar">${bars}</div></li>`;
     }).join("")}</ul>`;
     const note = heroes.some((s) => s.feetEstimated) ? `<p class="pfm-note">* ${esc(L("FeetEstimated"))}</p>` : "";
     const o = stats.outcome;
-    const banner = o ? `<div class="pfm-result pfm-result-${esc(o.result)}"><strong>${esc(L(`Result.${o.result}`))}</strong>${o.reason ? ` · ${esc(o.reason)}` : ""}${o.by === "gm" ? ` <em>(${esc(L("GmRuling"))})</em>` : ""}</div>` : "";
+    const banner = stats.toDate ? `<div class="pfm-result pfm-result-todate"><strong>${esc(L("ToDate"))}</strong> · ${esc(recordText(stats.results, true))}</div>` : o ?`<div class="pfm-result pfm-result-${esc(o.result)}"><strong>${esc(L(`Result.${o.result}`))}</strong>${o.reason ? ` · ${esc(o.reason)}` : ""}${o.by === "gm" ? ` <em>(${esc(L("GmRuling"))})</em>` : ""}</div>` : "";
     return banner + score + awards + table + note + killList;
   }
 
@@ -134,7 +174,10 @@ export class StatsDashboard extends ApplicationV2 {
       ${tile(L("Progression"), `${s.milestones} ${esc(L("Milestones"))}${s.levelsGained ? ` · +${s.levelsGained} ${esc(L("Levels"))}` : ""}${s.attunementPoints ? ` · ${s.attunementPoints} ${esc(L("Attunement"))}` : ""}`)}
     </div>`;
     const conds = Object.entries(s.conditions ?? {}).map(([k, v]) => `${k}${v > 1 ? ` ×${v}` : ""}`).join(", ");
-    const fateHtml = `<p class="pfm-fate"><strong>${esc(L("Fate"))}:</strong> ${esc(fateLine(s, stats))}${conds ? ` · ${esc(L("Conditions"))}: ${esc(conds)}` : ""}</p>`;
+    const fate = stats.toDate
+      ? `<strong>${esc(L(`Status.${s.status}`))}</strong> · ${esc(L("FightsRecord", { fights: s.fights }))} ${recordText(s.record)}`
+      : `<strong>${esc(L("Fate"))}:</strong> ${esc(fateLine(s, stats))}`;
+    const fateHtml = `<p class="pfm-fate">${fate}${conds ? ` · ${esc(L("Conditions"))}: ${esc(conds)}` : ""}</p>`;
     const avoided = Object.entries(s.avoidedBy).map(([k, v]) => `<li>${esc(k)}: ${v}</li>`).join("") || `<li>${esc(L("None"))}</li>`;
     const skills = Object.entries(s.checksBySkill).map(([k, v]) => `<li>${esc(k)}: ${v.successes}/${v.checks}</li>`).join("") || `<li>${esc(L("None"))}</li>`;
     const row = (label, f) => `<tr><td>${esc(L(label))}</td><td>${f(s.combatRolls)}</td><td>${f(s.checkRolls)}</td></tr>`;
@@ -169,6 +212,21 @@ export class StatsDashboard extends ApplicationV2 {
     const journal = game.journal.find((j) => j.getFlag(this.moduleId, "chronicle"));
     const button = journal ? `<p><button type="button" class="pfm-journal" data-action="journal"><i class="fa-solid fa-book-open"></i> ${esc(L("OpenJournal", { name: journal.name }))}</button></p>` : "";
     return `<div class="pfm-roll">${fightReport(stats, fight)}</div>${button}`;
+  }
+
+  /* ---------- Roll of Valour to date: every fight and its result ---------- */
+
+  #fightList(stats) {
+    const rows = [...stats.fights].reverse().map((f) => `<tr>
+      <td><a data-action="fight" data-fight="${esc(f.id)}">${esc(f.name)}</a></td>
+      <td>${f.started ? esc(new Date(f.started).toLocaleDateString()) : "–"}</td>
+      <td><span class="pfm-result-tag pfm-result-${esc(f.outcome.result)}">${esc(L(`Result.${f.outcome.result}`))}</span></td>
+      <td>${f.rounds}</td><td>${esc(f.mvp ?? "–")}</td><td>${esc(f.heroes.join(", "))}</td></tr>`).join("");
+    const head = ["Fight", "Date", "Result", "Rounds", "MVP", "Heroes"].map((k) => `<th>${esc(L(`FightCol.${k}`))}</th>`).join("");
+    const journal = game.journal.find((j) => j.getFlag(this.moduleId, "chronicle"));
+    const button = journal ? `<p><button type="button" class="pfm-journal" data-action="journal"><i class="fa-solid fa-book-open"></i> ${esc(L("OpenJournal", { name: journal.name }))}</button></p>` : "";
+    return `<div class="pfm-result pfm-result-todate"><strong>${esc(L("ToDate"))}</strong> · ${esc(recordText(stats.results, true))}</div>
+      <table class="pfm-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>${button}`;
   }
 
   /* ---------- Play-by-play ---------- */
