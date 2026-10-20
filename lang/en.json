@@ -202,5 +202,6 @@
   "PFM.Dose.AddictedHint": "<p>Each level weakens the next Dose of It'll Be Alright... by more than the last: 1, 3, 6, 10, 15 Madness and so on. A Rest lowers it by 1, but only after a night without a dose.</p>",
   "PFM.Dose.AfterRestOrInsane": "You may only take {action} straight after a Rest, unless you are Insane.",
   "PFM.Dose.FragileCalm": "Fragile Calm",
-  "PFM.Dose.FragileCalmHint": "<p>A Dose of It'll Be Alright... dragged this mind back from Insanity. The next Rest restores no Madness.</p>"
+  "PFM.Dose.FragileCalmHint": "<p>A Dose of It'll Be Alright... dragged this mind back from Insanity. The next Rest restores no Madness. If Madness fills up again before then, the calm shatters and addiction rises by 1.</p>",
+  "PFM.Dose.Shattered": "{actor}'s Fragile Calm shatters. The crash leaves them Insane again, and their addiction rises to {level}."
 }

@@ -50,6 +50,9 @@ export const canTakeDose = ({ insane, lastActionId }) => !!insane || lastActionI
  */
 export const withoutMadnessRecovery = (resources) => resources.filter((r) => !(r.resource === "madness" && r.delta < 0));
 
+/** Addiction after Fragile Calm shatters (the hero goes Insane again before their Rest): the crash adds 1 level. */
+export const afterShatter = (state) => ({ level: (state?.level ?? 0) + 1, dosed: !!state?.dosed });
+
 /** True when the change to a chat message is the GM confirming a card for this action id. */
 export function isActionConfirm(crucibleFlags, changed, actionId) {
   return crucibleFlags?.action?.id === actionId && changed?.flags?.crucible?.confirmed === true;

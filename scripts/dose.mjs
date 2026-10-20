@@ -2,8 +2,9 @@
 // When the GM confirms the card, the addiction from the dose goes on, so it never weakens the dose that caused it.
 // When the GM confirms a Rest card, the addiction drops by 1 unless the hero dosed since the last Rest.
 // A dose that breaks Insanity leaves "Fragile Calm": the next Rest restores no Madness, so the cure buys no free recovery.
+// If Madness fills up again before that Rest, the calm shatters and the crash adds 1 addiction.
 // Addiction lives on an "Addicted (N)" Active Effect, so players see it on the sheet.
-import { afterDose, afterRest, canTakeDose, isActionConfirm, DOSE_ACTION, doseHealing, withoutMadnessRecovery } from "./lib/dose.mjs";
+import { afterDose, afterRest, afterShatter, canTakeDose, isActionConfirm, DOSE_ACTION, doseHealing, withoutMadnessRecovery } from "./lib/dose.mjs";
 
 /** The addiction effect's id, fixed so each actor has at most one. */
 const EFFECT_ID = "pfmAddiction0000";
@@ -98,6 +99,20 @@ export function registerDose(moduleId) {
         if (actor.effects.has(EFFECT_ID)) await setAddiction(moduleId, actor, afterRest(getAddiction(moduleId, actor)));
       }
     }
+  });
+
+  // Fragile Calm shatters when Madness fills up again before the Rest: the calm goes, and the crash adds 1 addiction.
+  // The hero is Insane again, so they may take another dose, at worse tolerance.
+  Hooks.on("updateActor", async (actor, changed) => {
+    if (!isActiveGM() || changed.system?.resources?.madness === undefined) return;
+    if (!actor.system.isInsane || !actor.effects.has(CALM_ID)) return;
+    await actor.effects.get(CALM_ID).delete();
+    const state = afterShatter(getAddiction(moduleId, actor));
+    await setAddiction(moduleId, actor, state);
+    await ChatMessage.implementation.create({
+      speaker: ChatMessage.implementation.getSpeaker({ actor }),
+      content: `<p>${game.i18n.format("PFM.Dose.Shattered", { actor: actor.name, level: state.level })}</p>`
+    });
   });
 }
 

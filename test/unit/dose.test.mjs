@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addictionPenalty, afterDose, afterRest, canTakeDose, DOSE_ACTION, DOSE_ADDICTION, DOSE_HEALING, doseHealing, isActionConfirm, withoutMadnessRecovery } from "../../scripts/lib/dose.mjs";
+import { addictionPenalty, afterDose, afterRest, afterShatter, canTakeDose, DOSE_ACTION, DOSE_ADDICTION, DOSE_HEALING, doseHealing, isActionConfirm, withoutMadnessRecovery } from "../../scripts/lib/dose.mjs";
 
 const SHODDY = -2, STANDARD = 0, FINE = 1, SUPERIOR = 2, MASTERWORK = 3;
 const source = new URL("../../packs/_source/items/", import.meta.url);
@@ -105,5 +105,12 @@ describe("withoutMadnessRecovery", () => {
   it("drops only the Rest's Madness reduction after a dose broke Insanity", () => {
     const rest = [{ resource: "health", delta: 20 }, { resource: "morale", delta: 15 }, { resource: "wounds", delta: -2 }, { resource: "madness", delta: -2 }];
     expect(withoutMadnessRecovery(rest)).toEqual(rest.slice(0, 3));
+  });
+});
+
+describe("afterShatter", () => {
+  it("adds 1 addiction when Fragile Calm shatters, and keeps the night's dose on record", () => {
+    expect(afterShatter({ level: 2, dosed: true })).toEqual({ level: 3, dosed: true });
+    expect(afterShatter(undefined)).toEqual({ level: 1, dosed: false });
   });
 });
