@@ -1,8 +1,8 @@
 // Import a world's past chat history into the stats log, for a world that installed the module late.
 // Grouping is pure (lib/history.mjs); this file builds metadata from the world and saves.
 import { actorKey, extractRecords, isHazardKey } from "../lib/stats.mjs";
-import { groupHistory, reportRows } from "../lib/history.mjs";
-import { metaFor } from "./recorder.mjs";
+import { groupHistory, journalTargets, reportRows } from "../lib/history.mjs";
+import { chronicleJournal, metaFor, writeFightJournal } from "./recorder.mjs";
 import { flushLog, readLog, updateLog } from "./store.mjs";
 
 const actorIdOf = (uuid) => /Actor\.([^.]+)$/.exec(uuid ?? "")?.[1] ?? null;
@@ -138,9 +138,14 @@ export async function importHistory(moduleId, { since = 0, until = Infinity, dry
   const summary = {
     fights: fights.map((f) => ({ id: f.id, name: f.name, started: f.started, cards: f.cards, records: f.records.length })),
     sessions: sessions.map((s) => ({ id: s.id, cards: s.cards, records: s.records.length })),
-    skipped: grouped.skipped, saved: false
+    skipped: grouped.skipped, saved: false, pages: 0
   };
-  if (dryRun || (!fights.length && !sessions.length)) return summary;
+  summary.pagesMissing = (await journalPlan(moduleId, [])).length;
+  if (dryRun) return summary;
+  if (!fights.length && !sessions.length) {
+    summary.pages = await writeJournalPages(moduleId, []);
+    return summary;
+  }
 
   updateLog(moduleId, (l) => {
     for (const fight of fights) {
@@ -161,5 +166,23 @@ export async function importHistory(moduleId, { since = 0, until = Infinity, dry
   });
   await flushLog(moduleId);
   summary.saved = true;
+  summary.pages = await writeJournalPages(moduleId, fights.map((f) => f.id));
   return summary;
+}
+
+/** The fights to give a Roll of Valour page: see journalTargets. */
+async function journalPlan(moduleId, imported) {
+  const journal = await chronicleJournal(moduleId, { create: false });
+  const withPages = journal?.pages.map((p) => p.getFlag(moduleId, "fightId")).filter(Boolean) ?? [];
+  return journalTargets({ imported, stored: Object.keys(readLog(moduleId).fights), withPages });
+}
+
+/** Write (or rewrite) the Roll of Valour pages after an import. Returns how many pages were written. */
+async function writeJournalPages(moduleId, imported) {
+  let written = 0;
+  for (const id of await journalPlan(moduleId, imported)) {
+    await writeFightJournal(moduleId, id);
+    written++;
+  }
+  return written;
 }

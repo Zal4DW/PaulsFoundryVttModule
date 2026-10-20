@@ -105,6 +105,7 @@ A world that installed the module late can read its past chat log into the stats
 - **Fights.** Each Crucible "Initiative - Round N" report names its combat, so every combat becomes one fight. Action cards and checks after a report belong to that combat until 10 minutes pass with no action card. A noncombat card, such as Recover, ends it.
 - **Out of combat.** Everything else goes to that day's session bucket, as live recording would. An existing bucket is added to.
 - **No doubles.** Cards already in the stats log are skipped, so running the import again adds nothing.
+- **Roll of Valour pages.** The import writes a page for each fight it imports, and for any stored fight that still has none, so a world whose fights all came from an import gets its journal and the dashboard's journal button. Out-of-combat days get no page, as in live play. A fight's page is found by its fight id and rewritten, never duplicated. If nothing new is found but pages are missing, `/stats import` writes just the pages.
 - **Names and deaths.** Old tokens may be gone, so names come from the cards: speakers, targets and initiative rows. Same-named creatures are matched to their initiative rows in the order they first act. An adversary counts as dead when the health damage it took reaches its maximum health; heroes are never inferred dead. The fight result follows from that, and a GM can change it with `setFightOutcome`.
 - **Limits.** Move distances, Heroism held at the end of a fight, and conditions are not on the cards, so imported fights don't have them.
 

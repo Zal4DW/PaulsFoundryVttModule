@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COMBAT_TAIL_MS, groupHistory, isStatsCard, reportRows, sessionIdFor } from "../../scripts/lib/history.mjs";
+import { COMBAT_TAIL_MS, groupHistory, isSessionId, isStatsCard, journalTargets, reportRows, sessionIdFor } from "../../scripts/lib/history.mjs";
 import { loadFixture } from "./fixture-context.mjs";
 
 const report = (id, ts, combatId, round = 1) => ({ _id: id, timestamp: ts, speaker: { alias: `Initiative - Round ${round}` }, flags: { crucible: { isInitiativeReport: true } },
@@ -48,5 +48,26 @@ describe("reading past chat history", () => {
     expect(g.fights.map((f) => f.id)).toEqual([d.combat._id]);
     expect(g.fights[0].messages.length).toBe(47);
     expect(g.sessions[0].messages.every((m) => m.flags.crucible.action?.tags?.includes("noncombat"))).toBe(true);
+  });
+});
+
+describe("journalTargets", () => {
+  it("rewrites every combat just imported, even one that already has a page", () => {
+    expect(journalTargets({ imported: ["c1", "c2"], stored: ["c1", "c2"], withPages: ["c1"] })).toEqual(["c1", "c2"]);
+  });
+
+  it("backfills stored combats with no page, so an earlier import gets its journal", () => {
+    expect(journalTargets({ imported: [], stored: ["c1", "c2", "c3"], withPages: ["c2"] })).toEqual(["c1", "c3"]);
+  });
+
+  it("writes nothing twice and nothing when every combat already has a page", () => {
+    expect(journalTargets({ imported: [], stored: ["c1"], withPages: ["c1"] })).toEqual([]);
+    expect(journalTargets({ imported: ["c1"], stored: ["c1"], withPages: [] })).toEqual(["c1"]);
+  });
+
+  it("never gives an out-of-combat session a page", () => {
+    const s = sessionIdFor(Date.UTC(2026, 9, 18));
+    expect(isSessionId(s)).toBe(true);
+    expect(journalTargets({ imported: [s], stored: [s, "c1"], withPages: [] })).toEqual(["c1"]);
   });
 });
