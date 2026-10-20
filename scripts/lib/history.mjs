@@ -28,6 +28,23 @@ export function reportRows(content) {
 /** The session bucket for a timestamp, matching the live recorder ("session-YYYY-MM-DD", UTC). */
 export const sessionIdFor = (ts) => `session-${new Date(ts).toISOString().slice(0, 10)}`;
 
+/** True for an out-of-combat session bucket, which gets no Roll of Valour page (live play writes pages only for combats). */
+export const isSessionId = (id) => String(id).startsWith("session-");
+
+/**
+ * Which fights need a Roll of Valour page written after an import: every combat just imported (its page may be stale),
+ * and every stored combat that has no page yet. That backfills worlds whose fights all came from an import, without
+ * writing a page twice: a fight's page is found by its fightId flag and rewritten in place.
+ * @param {{imported?: string[], stored?: string[], withPages?: string[]}} ids
+ * @returns {string[]}
+ */
+export function journalTargets({ imported = [], stored = [], withPages = [] } = {}) {
+  const paged = new Set(withPages);
+  const out = new Set(imported.filter((id) => !isSessionId(id)));
+  for (const id of stored) if (!isSessionId(id) && !paged.has(id)) out.add(id);
+  return [...out];
+}
+
 /**
  * Split chat messages into fights and sessions.
  * A combat starts at its first initiative report. Action cards (not tagged noncombat) and checks follow it

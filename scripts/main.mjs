@@ -217,6 +217,12 @@ async function promptImportHistory() {
   if (!game.user.isGM) { ui.notifications.warn(game.i18n.localize("PFM.Stats.History.GmOnly")); return null; }
   const preview = await importHistory(MODULE_ID, { dryRun: true });
   if (!preview.fights.length && !preview.sessions.length) {
+    // Nothing new to import, but fights imported before the journal existed may still lack a Roll of Valour page.
+    if (preview.pagesMissing) {
+      const result = await importHistory(MODULE_ID, { dryRun: false });
+      ui.notifications.info(game.i18n.format("PFM.Stats.History.PagesOnly", { pages: result.pages }));
+      return result;
+    }
     ui.notifications.info(game.i18n.format("PFM.Stats.History.Nothing", { skipped: preview.skipped }));
     return preview;
   }
@@ -227,7 +233,7 @@ async function promptImportHistory() {
   const ok = await foundry.applications.api.DialogV2.confirm({ window: { title: game.i18n.localize("PFM.Stats.History.Title") }, content, rejectClose: false });
   if (!ok) return preview;
   const result = await importHistory(MODULE_ID, { dryRun: false });
-  ui.notifications.info(game.i18n.format("PFM.Stats.History.Done", { fights: result.fights.length, sessions: result.sessions.length }));
+  ui.notifications.info(game.i18n.format("PFM.Stats.History.Done", { fights: result.fights.length, sessions: result.sessions.length, pages: result.pages }));
   return result;
 }
 
