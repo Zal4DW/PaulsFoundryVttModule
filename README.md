@@ -34,6 +34,20 @@ Standard matches the cleric Briannon in Ember's Glinthome, who heals 5 Wounds fo
 
 To sell the kit in Crucible Shop's default shop, open Crucible's system settings, choose Compendium Sources, and add "Paul's Items" under Equipment. Crucible Shop stocks its default shop from that list, and character creation's Equipment step uses it too. For a custom shop, drag the kit in from the compendium.
 
+## Crucible: Dose of It'll Be Alright...
+
+A back-alley tonic in "Paul's Items" that clears Madness and leaves an addiction. Like the Wound kit, a hero takes it straight after their Rest, one per Rest. It heals first, at the hero's current addiction level, and then adds its own addiction.
+
+| Quality | Madness cleared | Addiction added | Price |
+|---|---|---|---|
+| Shoddy | 1 | +1 | 1.5 gp |
+| Standard | 5 | +2 | 3 gp |
+| Fine | 10 | +3 | 24 gp |
+| Superior | 20 | +4 | 81 gp |
+| Masterwork | 40 | +5 | 375 gp |
+
+Each addiction level takes a flat amount off a dose, more at each level: 1, 3, 6, 10, 15, 21, 28, 36 Madness at levels 1 to 8. Cheap doses stop working quickly, and stronger ones still get through. A Rest lowers addiction by 1, but only if the hero took no dose since their last Rest. The hero's sheet shows the level as an "Addicted (N)" effect. An Insane hero cannot Rest, so cannot take a dose.
+
 ## Development
 
 A Docker Foundry v14 server, ESLint, Vitest, Quench and a Playwright smoke test are set up. See [docs/testing.md](docs/testing.md).

@@ -197,5 +197,7 @@
   "PFM.Stats.FightCol.Result": "Result",
   "PFM.Stats.FightCol.Rounds": "Rounds",
   "PFM.Stats.FightCol.MVP": "MVP",
-  "PFM.Stats.FightCol.Heroes": "Heroes"
+  "PFM.Stats.FightCol.Heroes": "Heroes",
+  "PFM.Dose.Addicted": "Addicted ({level})",
+  "PFM.Dose.AddictedHint": "<p>Each level weakens the next Dose of It'll Be Alright... by more than the last: 1, 3, 6, 10, 15 Madness and so on. A Rest lowers it by 1, but only after a night without a dose.</p>"
 }

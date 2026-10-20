@@ -11,6 +11,7 @@ const foundryGlobals = {
   CONST: "readonly",
   canvas: "readonly",
   ChatMessage: "readonly",
+  fromUuid: "readonly",
   fromUuidSync: "readonly",
   JournalEntry: "readonly",
   Actor: "readonly",

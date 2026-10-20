@@ -1,0 +1,76 @@
+{
+  "_id": "pfmAlrightDose00",
+  "_key": "!items!pfmAlrightDose00",
+  "name": "Dose of It'll Be Alright...",
+  "type": "consumable",
+  "img": "modules/pauls-foundry-module/assets/icons/alright-dose.webp",
+  "system": {
+    "identifier": "pfmAlrightDose",
+    "category": "flask",
+    "quantity": 1,
+    "weight": 0.5,
+    "price": 300,
+    "quality": "standard",
+    "broken": false,
+    "equipped": false,
+    "invested": false,
+    "properties": [
+      "stackable"
+    ],
+    "description": {
+      "public": "<p>Nobody admits to brewing it and nobody asks where it comes from. A swig of this murky violet tonic and the voices quiet down, the shadows stop moving, and for a while it really will be alright.</p><p>The mind remembers the relief, though. Each dose leaves you a little more <strong>Addicted</strong>, and an addicted mind needs a stronger dose to feel anything at all.</p>",
+      "private": ""
+    },
+    "actions": [
+      {
+        "id": "pfmAlrightDose",
+        "name": "Take a Dose",
+        "img": "modules/pauls-foundry-module/assets/icons/alright-dose.webp",
+        "condition": "",
+        "description": "<p>Take the @ref[item.name] straight after a Rest, or give it to an adjacent ally. The target recovers @Rule[resource.madness]{Madness} by the quality of the dose, less a penalty for how <strong>Addicted</strong> they already are. Then the dose adds to their addiction.</p><ul><li><p><strong>Shoddy</strong> - Recover 1 <strong>Madness</strong>. Addiction +1.</p></li><li><p><strong>Standard</strong> - Recover 5 <strong>Madness</strong>. Addiction +2.</p></li><li><p><strong>Fine</strong> - Recover 10 <strong>Madness</strong>. Addiction +3.</p></li><li><p><strong>Superior</strong> - Recover 20 <strong>Madness</strong>. Addiction +4.</p></li><li><p><strong>Masterwork</strong> - Recover 40 <strong>Madness</strong>. Addiction +5.</p></li></ul><p><strong>Tolerance.</strong> Each level of addiction weakens a dose by more than the last: 1, 3, 6, 10, 15, 21, 28, 36 Madness at levels 1 to 8.</p><p><strong>Getting clean.</strong> A Rest lowers addiction by 1, but only if you took no dose since your last Rest.</p>",
+        "cost": {
+          "action": 0,
+          "focus": 0,
+          "heroism": 0,
+          "weapon": false,
+          "hands": 0
+        },
+        "range": {
+          "minimum": null,
+          "maximum": 1,
+          "weapon": false
+        },
+        "target": {
+          "type": "single",
+          "number": 1,
+          "scope": 4,
+          "self": true
+        },
+        "effects": [],
+        "tags": [
+          "consume",
+          "rest"
+        ],
+        "summon": null,
+        "persistRegion": false,
+        "regionBehavior": null
+      }
+    ],
+    "uses": {
+      "value": 1,
+      "max": 1
+    },
+    "scroll": {
+      "runes": [],
+      "gestures": [],
+      "inflections": []
+    }
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 0,
+  "ownership": {
+    "default": 0
+  },
+  "flags": {}
+}

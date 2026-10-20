@@ -1,7 +1,7 @@
 {
   "id": "pauls-foundry-module",
   "title": "Paul's Foundry Module",
-  "description": "Fight and session stats with a dashboard, Roll of Valour journal and chat history import, party and character shortcuts, a grip toggle for Crucible's Versatile weapons, real token light for Crucible's Reveal spell, and a Wound Medical Kit to use after a Rest. Works with any system; the stats, grip toggle, Reveal light and kit are made for Crucible.",
+  "description": "Fight and session stats with a dashboard, Roll of Valour journal and chat history import, party and character shortcuts, a grip toggle for Crucible's Versatile weapons, real token light for Crucible's Reveal spell, a Wound Medical Kit to use after a Rest, and an addictive Madness tonic. Works with any system; the stats, grip toggle, Reveal light and items are made for Crucible.",
   "version": "0.3.1",
   "compatibility": { "minimum": "13", "verified": "14" },
   "authors": [{ "name": "Zal4DW" }],
