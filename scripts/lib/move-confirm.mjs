@@ -11,8 +11,17 @@ export const MOVE_ACTION = "move";
 /** The User flag that mirrors a player's "Confirm my own movement" setting, so the GM's client can read it. */
 export const HOLD_FLAG = "confirmOwnMoves";
 
+/** The chat card flag the GM's client sets on a Move card it held back for its player. */
+export const HELD_FLAG = "heldForPlayer";
+
 /** True for an unconfirmed Move card: the move has happened on the canvas, but its AP is not spent yet. */
 export const isPendingMove = (crucibleFlags) => crucibleFlags?.action?.id === MOVE_ACTION && !crucibleFlags?.confirmed;
+
+/**
+ * True for a pending Move card this module held back for its player. Only these may be confirmed by the player or
+ * at turn end: a card the GM left unconfirmed on purpose (auto-confirm off) has no marker and stays the GM's.
+ */
+export const isHeldMove = (crucibleFlags, moduleFlags) => isPendingMove(crucibleFlags) && !!moduleFlags?.[HELD_FLAG];
 
 /**
  * Whether the GM's auto-confirm should leave this card for its player: a Move card, made by a player (not a GM)
@@ -22,9 +31,9 @@ export const isPendingMove = (crucibleFlags) => crucibleFlags?.action?.id === MO
 export const holdForPlayer = ({ actionId, authorIsGM, authorHolds }) => actionId === MOVE_ACTION && !authorIsGM && !!authorHolds;
 
 /**
- * The pending Move cards to confirm before an actor acts again: unconfirmed, by this user, for this actor.
- * @param {{id: string, authorId: string, actorUuid: string, flags: object}[]} messages
+ * The held Move cards to confirm before an actor acts again: held for this user, still unconfirmed, for this actor.
+ * @param {{id: string, authorId: string, actorUuid: string, flags: object, moduleFlags: object}[]} messages
  */
 export function pendingMovesFor(messages, { userId, actorUuid }) {
-  return messages.filter((m) => m.authorId === userId && m.actorUuid === actorUuid && isPendingMove(m.flags));
+  return messages.filter((m) => m.authorId === userId && m.actorUuid === actorUuid && isHeldMove(m.flags, m.moduleFlags));
 }
