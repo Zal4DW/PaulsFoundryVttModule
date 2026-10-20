@@ -120,7 +120,10 @@ Hooks.once("init", () => {
     placeTosslight: (token, casterUuid) => placeTosslight(MODULE_ID, token, casterUuid),
     dismissTosslight: (token) => dismissTosslight(MODULE_ID, token),
     getAddiction: (actor) => getAddiction(MODULE_ID, actor).level,
-    setAddiction: (actor, level) => setAddiction(MODULE_ID, actor, { level: Math.max(0, Math.floor(level)), dosed: false }),
+    setAddiction: (actor, level) => {
+      if (!Number.isFinite(level)) throw new Error(`setAddiction needs a finite number for the level, not ${level}`);
+      return setAddiction(MODULE_ID, actor, { level: Math.max(0, Math.floor(level)), dosed: false });
+    },
     rebuildFight: (fightId) => rebuildFight(MODULE_ID, fightId),
     addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
     setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),
