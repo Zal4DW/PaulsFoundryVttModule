@@ -30,6 +30,9 @@ services:
       - ./scripts:/data/Data/modules/pauls-foundry-module/scripts
       - ./styles:/data/Data/modules/pauls-foundry-module/styles
       - ./lang:/data/Data/modules/pauls-foundry-module/lang
+      - ./assets:/data/Data/modules/pauls-foundry-module/assets
+      # Compendium packs, built from packs/_source with npm run build:packs. Return to Setup before a rebuild.
+      - ./packs:/data/Data/modules/pauls-foundry-module/packs
 
 secrets:
   foundry_credentials:

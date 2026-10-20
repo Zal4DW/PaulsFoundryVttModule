@@ -8,6 +8,7 @@ import { registerStatsSettings, updateLog, flushLog } from "./stats/store.mjs";
 import { registerGripToggle, toggleGrip } from "./grip.mjs";
 import { importHistory } from "./stats/history.mjs";
 import { dismissTosslight, placeTosslight, registerTosslight } from "./tosslight.mjs";
+import { registerMedicalKit } from "./medical-kit.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -103,10 +104,12 @@ Hooks.once("init", () => {
   // Fight stats. Every user can read them; the GM client records them. A change re-draws open dashboards.
   registerStatsSettings(MODULE_ID, () => { if (statsApp?.rendered) statsApp.render(); });
 
-  // Crucible only: a grip toggle for Versatile weapons on actor sheets, and Reveal's tosslight as real token light.
+  // Crucible only: a grip toggle for Versatile weapons on actor sheets, Reveal's tosslight as real token light,
+  // and the Wound Medical Kit's action.
   if (game.system.id === "crucible") {
     registerGripToggle();
     registerTosslight(MODULE_ID);
+    registerMedicalKit();
   }
 
   // Public API, used by macros and by the Quench tests.
