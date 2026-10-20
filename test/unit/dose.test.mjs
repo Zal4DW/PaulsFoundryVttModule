@@ -131,3 +131,21 @@ describe("getsShakes", () => {
     expect(SHAKES_HOURS).toBe(4);
   });
 });
+
+describe("GM notes on the dose", () => {
+  const notes = dose.system.description.private;
+
+  it("are in the GM-only Secret Description, not the public one", () => {
+    expect(notes).toContain("GM notes");
+    expect(dose.system.description.public).not.toContain("GM notes");
+  });
+
+  it("give the same tolerance penalties and Shakes length as the code", () => {
+    for (const level of [1, 2, 3, 4, 5, 6, 7, 8]) expect(notes).toContain(`<td>${level}</td><td>${addictionPenalty(level)}</td>`);
+    expect(notes).toContain(`${SHAKES_HOURS} hours`);
+  });
+
+  it("name the macro API the GM can use to fix an addiction", () => {
+    expect(notes).toContain("api.setAddiction(actor, level)");
+  });
+});

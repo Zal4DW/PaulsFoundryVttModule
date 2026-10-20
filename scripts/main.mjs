@@ -9,7 +9,7 @@ import { registerGripToggle, toggleGrip } from "./grip.mjs";
 import { importHistory } from "./stats/history.mjs";
 import { dismissTosslight, placeTosslight, registerTosslight } from "./tosslight.mjs";
 import { registerMedicalKit } from "./medical-kit.mjs";
-import { registerDose } from "./dose.mjs";
+import { getAddiction, registerDose, setAddiction } from "./dose.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -119,6 +119,8 @@ Hooks.once("init", () => {
     importHistory: (options) => importHistory(MODULE_ID, options), promptImportHistory,
     placeTosslight: (token, casterUuid) => placeTosslight(MODULE_ID, token, casterUuid),
     dismissTosslight: (token) => dismissTosslight(MODULE_ID, token),
+    getAddiction: (actor) => getAddiction(MODULE_ID, actor).level,
+    setAddiction: (actor, level) => setAddiction(MODULE_ID, actor, { level: Math.max(0, Math.floor(level)), dosed: false }),
     rebuildFight: (fightId) => rebuildFight(MODULE_ID, fightId),
     addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
     setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),
