@@ -32,7 +32,7 @@ Crucible's Rest removes only level-many Wounds, so a level 1 hero gets back 1 Wo
 
 Standard matches the cleric Briannon in Ember's Glinthome, who heals 5 Wounds for 1 gp, so a kit costs more than the temple but works in the field. Crucible scales the price by quality from the 3 gp base.
 
-Both items show up in Crucible Shop's default shop and in character creation's Equipment step without any setup: the module adds "Paul's Items" to Crucible's equipment packs when the world loads. It does not change Crucible's own Compendium Sources setting. To keep the items out, turn off the module's "Paul's Items in shops and character creation" setting. For a custom shop, drag an item in from the compendium.
+Both items show up in Crucible Shop's default shop and in character creation's Equipment step without any setup: the module adds "Paul's Items" to Crucible's equipment packs when the world loads. It does not change Crucible's own Compendium Sources setting. To keep the items out, turn off the module's "Paul's Items in shops and character creation" setting. That only stops the module adding the pack: if a GM lists "Paul's Items" in Crucible's own Compendium Sources, Crucible's setting wins. For a custom shop, drag an item in from the compendium.
 
 ## Crucible: Dose of It'll Be Alright...
 

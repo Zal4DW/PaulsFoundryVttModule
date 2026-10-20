@@ -141,7 +141,8 @@ Hooks.once("init", () => {
 
 // Add "Paul's Items" to Crucible's equipment packs, so Crucible Shop's default shop and character creation list them.
 // Crucible fills crucible.CONFIG.packs from its Compendium Sources setting in its own setup hook, which is registered
-// before this one, so the pack is added after Crucible has built the list. The GM's setting itself is not changed.
+// before this one, so the pack is added after Crucible has built the list. The GM's setting itself is not changed, and
+// turning this module setting off does not remove the pack if the GM listed it there: Crucible's own setting wins.
 Hooks.once("setup", () => {
   if (game.system.id !== "crucible" || !game.settings.get(MODULE_ID, "itemsAsEquipment")) return;
   const pack = `${MODULE_ID}.items`;
