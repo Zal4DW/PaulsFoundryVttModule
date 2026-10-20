@@ -12,6 +12,9 @@ export function registerItemPiles(moduleId) {
     requiresReload: true
   });
 
+  // Marks player clients, so styles/module.css can hide Item Piles' GM-only "Config Update" button from them.
+  Hooks.once("ready", () => document.body.classList.toggle("pfm-player", !game.user.isGM));
+
   // Item Piles fires this once its API is ready, on every client. "latest" applies it to any Crucible version.
   Hooks.once("item-piles-ready", async (api) => {
     if (!game.settings.get(moduleId, "itemPilesIntegration")) return;

@@ -68,6 +68,8 @@ The GM's own auto-confirm setting is unchanged, and players who leave it off see
 - Ancestry, archetype, background, spell, talent and taxonomy items never show as loot.
 - New piles are adversary actors.
 
+Item Piles 3.3.4 shows its GM-only "Config Update" button in the loot window to players too, and a player's click fails with a permission error. The module hides that button on player clients.
+
 Item Piles keeps a GM's own edits to these settings, and applies this setup again only when a module update raises its version. Turn off "Set up Item Piles for Crucible" to configure Item Piles by hand.
 
 ## Development
