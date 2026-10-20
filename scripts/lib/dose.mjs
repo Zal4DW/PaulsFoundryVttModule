@@ -3,7 +3,8 @@
 // A dose heals at the hero's current addiction level, then adds its own addiction. The penalty grows by one more
 // each level (1, 3, 6, 10, 15 ...), so cheap doses stop working fast and only stronger ones get through.
 // A Rest takes 1 level off only if the hero took no dose since the last Rest: a night on the stuff holds the level.
-// Like the Wound Medical Kit, the dose has Crucible's "rest" tag, so a hero takes at most one per Rest.
+// Like the Wound Medical Kit, a hero takes it straight after their Rest, one per Rest. An Insane hero cannot Rest,
+// so they may take it at any time out of combat: it is the one thing that brings them back, and it is nasty.
 
 /** The dose's action id. Crucible looks up action hooks by this id in crucible.api.hooks.action. */
 export const DOSE_ACTION = "pfmAlrightDose";
@@ -34,6 +35,20 @@ export function afterRest(state) {
   const level = state?.level ?? 0;
   return { level: state?.dosed ? level : Math.max(0, level - 1), dosed: false };
 }
+
+/**
+ * Whether a hero may take a dose now. Normally only straight after their Rest, like the Wound kit.
+ * An Insane hero cannot Rest, so they may take one at any time out of combat: the dose is the nasty way back.
+ * @returns {boolean}
+ */
+export const canTakeDose = ({ insane, lastActionId }) => !!insane || lastActionId === "rest";
+
+/**
+ * A Rest's recovery after a dose taken while Insane: everything but Madness. The dose is what broke the Insanity,
+ * so the Rest it unlocked does not also take the hero's level off their Madness for free.
+ * @param {{resource: string, delta: number}[]} resources   The Rest's recovery deltas
+ */
+export const withoutMadnessRecovery = (resources) => resources.filter((r) => !(r.resource === "madness" && r.delta < 0));
 
 /** True when the change to a chat message is the GM confirming a card for this action id. */
 export function isActionConfirm(crucibleFlags, changed, actionId) {

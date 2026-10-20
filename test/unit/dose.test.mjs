@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addictionPenalty, afterDose, afterRest, DOSE_ACTION, DOSE_ADDICTION, DOSE_HEALING, doseHealing, isActionConfirm } from "../../scripts/lib/dose.mjs";
+import { addictionPenalty, afterDose, afterRest, canTakeDose, DOSE_ACTION, DOSE_ADDICTION, DOSE_HEALING, doseHealing, isActionConfirm, withoutMadnessRecovery } from "../../scripts/lib/dose.mjs";
 
 const SHODDY = -2, STANDARD = 0, FINE = 1, SUPERIOR = 2, MASTERWORK = 3;
 const source = new URL("../../packs/_source/items/", import.meta.url);
@@ -63,6 +63,21 @@ describe("addiction over nights", () => {
   });
 });
 
+describe("canTakeDose", () => {
+  it("allows a dose straight after a Rest", () => {
+    expect(canTakeDose({ insane: false, lastActionId: "rest" })).toBe(true);
+  });
+
+  it("refuses a sane hero whose last action was not a Rest, such as a second dose", () => {
+    expect(canTakeDose({ insane: false, lastActionId: "pfmAlrightDose" })).toBe(false);
+    expect(canTakeDose({ insane: false, lastActionId: undefined })).toBe(false);
+  });
+
+  it("lets an Insane hero take one at any time, since they cannot Rest", () => {
+    expect(canTakeDose({ insane: true, lastActionId: "strike" })).toBe(true);
+  });
+});
+
 describe("isActionConfirm", () => {
   it("is true only when the GM confirms a card for that action", () => {
     expect(isActionConfirm({ action: { id: DOSE_ACTION } }, { flags: { crucible: { confirmed: true } } }, DOSE_ACTION)).toBe(true);
@@ -72,15 +87,23 @@ describe("isActionConfirm", () => {
 });
 
 describe("Dose of It'll Be Alright... item", () => {
-  it("is a standard flask at 3 gp with one rest-only consumed action", () => {
+  it("is a standard flask at 3 gp with one consumed, out-of-combat action", () => {
     expect(dose).toBeDefined();
     expect(dose.system).toMatchObject({ category: "flask", quality: "standard", price: 300 });
     expect(dose.system.actions[0].id).toBe(DOSE_ACTION);
-    expect(dose.system.actions[0].tags).toEqual(expect.arrayContaining(["consume", "rest"]));
+    // No Crucible "rest" tag: it would lock out Insane heroes, who cannot Rest. The hook checks it instead.
+    expect(dose.system.actions[0].tags).toEqual(["consume", "noncombat"]);
   });
 
   it("states the same amounts in its description as the code uses", () => {
     const text = dose.system.actions[0].description;
     for (const q of Object.keys(DOSE_HEALING)) expect(text).toContain(`Recover ${DOSE_HEALING[q]} <strong>Madness</strong>. Addiction +${DOSE_ADDICTION[q]}.`);
+  });
+});
+
+describe("withoutMadnessRecovery", () => {
+  it("drops only the Rest's Madness reduction after a dose broke Insanity", () => {
+    const rest = [{ resource: "health", delta: 20 }, { resource: "morale", delta: 15 }, { resource: "wounds", delta: -2 }, { resource: "madness", delta: -2 }];
+    expect(withoutMadnessRecovery(rest)).toEqual(rest.slice(0, 3));
   });
 });

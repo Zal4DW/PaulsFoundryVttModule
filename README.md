@@ -46,7 +46,7 @@ A back-alley tonic in "Paul's Items" that clears Madness and leaves an addiction
 | Superior | 20 | +4 | 81 gp |
 | Masterwork | 40 | +5 | 375 gp |
 
-Each addiction level takes a flat amount off a dose, more at each level: 1, 3, 6, 10, 15, 21, 28, 36 Madness at levels 1 to 8. Cheap doses stop working quickly, and stronger ones still get through. A Rest lowers addiction by 1, but only if the hero took no dose since their last Rest. The hero's sheet shows the level as an "Addicted (N)" effect. An Insane hero cannot Rest, so cannot take a dose.
+Each addiction level takes a flat amount off a dose, more at each level: 1, 3, 6, 10, 15, 21, 28, 36 Madness at levels 1 to 8. Cheap doses stop working quickly, and stronger ones still get through. A Rest lowers addiction by 1, but only if the hero took no dose since their last Rest. The hero's sheet shows the level as an "Addicted (N)" effect. An Insane hero cannot Rest, so they may take a dose at any time out of combat, and it is the only thing that brings them back. That dose leaves a "Fragile Calm": their next Rest restores no Madness, so the cure buys no free recovery.
 
 ## Development
 
