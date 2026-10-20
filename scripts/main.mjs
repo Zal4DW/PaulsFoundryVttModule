@@ -112,6 +112,15 @@ Hooks.once("init", () => {
     registerTosslight(MODULE_ID);
     registerMedicalKit();
     registerDose(MODULE_ID);
+    game.settings.register(MODULE_ID, "itemsAsEquipment", {
+      name: "PFM.Settings.ItemsAsEquipment.Name",
+      hint: "PFM.Settings.ItemsAsEquipment.Hint",
+      scope: "world",
+      config: true,
+      type: Boolean,
+      default: true,
+      requiresReload: true
+    });
   }
 
   // Public API, used by macros and by the Quench tests.
@@ -128,6 +137,15 @@ Hooks.once("init", () => {
     addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
     setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),
     writeFightJournal: (fightId) => writeFightJournal(MODULE_ID, fightId) };
+});
+
+// Add "Paul's Items" to Crucible's equipment packs, so Crucible Shop's default shop and character creation list them.
+// Crucible fills crucible.CONFIG.packs from its Compendium Sources setting in its own setup hook, which is registered
+// before this one, so the pack is added after Crucible has built the list. The GM's setting itself is not changed.
+Hooks.once("setup", () => {
+  if (game.system.id !== "crucible" || !game.settings.get(MODULE_ID, "itemsAsEquipment")) return;
+  const pack = `${MODULE_ID}.items`;
+  if (game.packs.has(pack)) globalThis.crucible?.CONFIG?.packs?.equipment?.add(pack);
 });
 
 Hooks.once("ready", () => {
