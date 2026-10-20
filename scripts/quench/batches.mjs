@@ -230,4 +230,34 @@ export function registerQuenchBatches(quench, moduleId) {
     },
     { displayName: "Paul's Foundry Module: hotbar" }
   );
+
+  quench.registerBatch(
+    `${moduleId}.fled`,
+    (context) => {
+      const { describe, it, assert } = context;
+
+      describe("Mark as fled in the combat tracker", () => {
+        // The v14 docs only describe getDocumentContextOptions(application, menuItems) in general. This runs the
+        // tracker's row menu event the way _createContextMenu does (default hook name "get{}ContextOptions"), so it
+        // fails if Foundry stops firing getCombatTrackerContextOptions for combatant rows.
+        it("adds Mark as fled and Clear fled to the combatant row menu", function () {
+          if (!ui.combat?._getEntryContextOptions) this.skip();
+          const items = ui.combat._doEvent(ui.combat._getEntryContextOptions, { hookName: "get{}ContextOptions", hookResponse: true });
+          const labels = items.map((i) => i.label ?? i.name);
+          assert.include(labels, "PFM.Stats.Fled.Mark");
+          assert.include(labels, "PFM.Stats.Fled.Clear");
+        });
+
+        it("hides both entries from players", () => {
+          const items = [];
+          Hooks.call("getCombatTrackerContextOptions", ui.combat, items);
+          const mark = items.find((i) => i.label === "PFM.Stats.Fled.Mark");
+          assert.exists(mark);
+          if (!game.user.isGM) assert.isFalse(mark.visible({ dataset: {} }));
+          else assert.isFalse(mark.visible({ dataset: { combatantId: "no-such-combatant" } }), "no combatant, no entry");
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: fled adversaries" }
+  );
 }

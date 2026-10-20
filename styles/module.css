@@ -6,6 +6,10 @@
 /* Stats dashboard */
 .pfm-stats .window-content { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 .pfm-stats .pfm-head { display: flex; gap: 0.5rem; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--color-border, #555); flex-wrap: wrap; }
+.pfm-stats .pfm-result-control { display: flex; gap: 0.5rem; align-items: center; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--color-border, #555); }
+.pfm-stats .pfm-result-control select { width: auto; }
+.pfm-stats .pfm-result-control .pfm-result-note { flex: 1; }
+.pfm-stats .pfm-result-control button { width: auto; white-space: nowrap; }
 .pfm-stats .pfm-fight { width: auto; max-width: 18rem; }
 .pfm-stats .pfm-tabs { display: flex; gap: 0.25rem; }
 .pfm-stats .pfm-tab { width: auto; padding: 0 0.75rem; }

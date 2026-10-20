@@ -52,6 +52,8 @@ export function metaFor(key, combat = game.combat) {
     important: !!actor?.system?.advancement?.important, rank: actor?.system?.advancement?.rank ?? null, actorId: actor?.id ?? null,
     combatantId: combatant?.id ?? null, linked: tokenDoc ? !!tokenDoc.actorLink : true,
     dead: !!(actor?.statuses?.has("dead") || combatant?.isDefeated), owners,
+    // A GM marked it as fled from the combat tracker (scripts/stats/fled.mjs). It counts as out of the fight.
+    fled: !!combatant?.getFlag("pauls-foundry-module", "fled"),
     img: tokenDoc?.texture?.src ?? actor?.img ?? null,
     // Where each combatant stands now. Read at the end of a fight, this says how it finished.
     statuses: [...(actor?.statuses ?? [])].filter((x) => TRACKED_CONDITIONS.includes(x)),
@@ -80,7 +82,8 @@ function refreshMeta(fight, combat = game.combat) {
     const fresh = metaFor(key, combat);
     // A deleted token (often a defeated minion) resolves to nothing. Keep what was recorded, or its kill is lost.
     if (!fresh.actorId) continue;
-    fight.meta[key] = { ...fight.meta[key], ...fresh, combatantId: fight.meta[key].combatantId, dead: fight.meta[key].dead || fresh.dead };
+    // Dead and fled stay set: a GM often deletes a fled adversary's token, which also removes its combatant flag.
+    fight.meta[key] = { ...fight.meta[key], ...fresh, combatantId: fight.meta[key].combatantId, dead: fight.meta[key].dead || fresh.dead, fled: !!(fight.meta[key].fled || fresh.fled) };
   }
 }
 
@@ -287,6 +290,13 @@ export function startRecorder(moduleId) {
   // Keep dead / defeated flags current as the fight goes on.
   Hooks.on("updateCombat", (combat) => {
     if (!isRecorder() || !combat.started) return;
+    updateLog(moduleId, (log) => refreshMeta((log.fights[combat.id] ??= fightShell(combat.id)), combat));
+  });
+
+  // A combatant marked or cleared as fled: record it now, before the GM removes the token.
+  Hooks.on("updateCombatant", (combatant, change) => {
+    const combat = combatant.parent;
+    if (!isRecorder() || !combat?.started || !foundry.utils.hasProperty(change, `flags.${moduleId}`)) return;
     updateLog(moduleId, (log) => refreshMeta((log.fights[combat.id] ??= fightShell(combat.id)), combat));
   });
 }
