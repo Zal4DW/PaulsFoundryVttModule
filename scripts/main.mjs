@@ -10,6 +10,7 @@ import { importHistory } from "./stats/history.mjs";
 import { dismissTosslight, placeTosslight, registerTosslight } from "./tosslight.mjs";
 import { registerMedicalKit } from "./medical-kit.mjs";
 import { getAddiction, registerDose, setAddiction } from "./dose.mjs";
+import { registerMoveConfirm, syncMoveConfirmFlag } from "./move-confirm.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -112,6 +113,7 @@ Hooks.once("init", () => {
     registerTosslight(MODULE_ID);
     registerMedicalKit();
     registerDose(MODULE_ID);
+    registerMoveConfirm(MODULE_ID);
     game.settings.register(MODULE_ID, "itemsAsEquipment", {
       name: "PFM.Settings.ItemsAsEquipment.Name",
       hint: "PFM.Settings.ItemsAsEquipment.Hint",
@@ -150,6 +152,7 @@ Hooks.once("setup", () => {
 });
 
 Hooks.once("ready", () => {
+  if (game.system.id === "crucible") syncMoveConfirmFlag(MODULE_ID);
   startRecorder(MODULE_ID);
   if (!game.settings.get(MODULE_ID, "enabled")) return;
   console.log(`${MODULE_ID} | ready (system: ${game.system.id})`);
