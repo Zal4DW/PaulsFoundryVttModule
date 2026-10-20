@@ -59,6 +59,17 @@ Crucible's "auto-confirm self actions" setting has the GM's client confirm every
 
 The GM's own auto-confirm setting is unchanged, and players who leave it off see no difference.
 
+## Crucible: Item Piles setup
+
+[Item Piles](https://github.com/fantasycalendar/FoundryVTT-ItemPiles) makes tokens into loot piles and containers, but it has no settings for Crucible: it warns "System Not Recognized" and doesn't know where Crucible keeps quantity, price or coin. When Item Piles is active, this module registers a Crucible setup with it:
+
+- Quantity is `system.quantity` and price is `system.price`.
+- Coin is one Copper currency on `system.currency`. Crucible stores all coin as copper (10 cp = 1 sp, 100 cp = 1 gp, 1000 cp = 1 pp), and Item Piles can't split one number into several coins.
+- Ancestry, archetype, background, spell, talent and taxonomy items never show as loot.
+- New piles are adversary actors.
+
+Item Piles keeps a GM's own edits to these settings, and applies this setup again only when a module update raises its version. Turn off "Set up Item Piles for Crucible" to configure Item Piles by hand.
+
 ## Development
 
 A Docker Foundry v14 server, ESLint, Vitest, Quench and a Playwright smoke test are set up. See [docs/testing.md](docs/testing.md).

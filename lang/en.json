@@ -19,6 +19,8 @@
   "PFM.Settings.RevealLight.Hint": "When the GM confirms a Reveal card, the target's token (or the caster's, with no target) gets a tosslight: bright 20 ft, dim 40 ft. Each caster has one at a time. Dismiss it from the token HUD.",
   "PFM.Settings.ConfirmOwnMoves.Name": "Confirm my own movement (Crucible)",
   "PFM.Settings.ConfirmOwnMoves.Hint": "For players learning to move. When the GM auto-confirms self actions, your Move cards wait for you instead: the token moves but no AP is spent, so Ctrl+Z takes a mistake back for free. Click Confirm on the card when you are happy. Your next action, or the end of your turn, confirms it for you.",
+  "PFM.Settings.ItemPilesIntegration.Name": "Set up Item Piles for Crucible",
+  "PFM.Settings.ItemPilesIntegration.Hint": "When Item Piles is active, tell it where Crucible keeps item quantity, price and coin, and leave talents, spells and other character items out of loot. Coin shows as copper (100 cp = 1 gp). Your own changes in Item Piles' settings are kept until a new module version updates this setup. Has no effect without Item Piles.",
   "PFM.Settings.ItemsAsEquipment.Name": "Paul's Items in shops and character creation (Crucible)",
   "PFM.Settings.ItemsAsEquipment.Hint": "Adds the Paul's Items compendium to Crucible's equipment, so Crucible Shop's default shop sells the Wound Medical Kit and It'll Be Alright..., and character creation offers them. Turn off and the module stops adding them. If you list Paul's Items in Crucible's own Compendium Sources, Crucible still uses it.",
   "PFM.Settings.KeepCoreHotbar.Name": "Keep Foundry's Hotbar with Crucible Tongs",
