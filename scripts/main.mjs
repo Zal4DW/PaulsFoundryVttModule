@@ -11,6 +11,7 @@ import { dismissTosslight, placeTosslight, registerTosslight } from "./tosslight
 import { registerMedicalKit } from "./medical-kit.mjs";
 import { getAddiction, registerDose, setAddiction } from "./dose.mjs";
 import { registerMoveConfirm, syncMoveConfirmFlag } from "./move-confirm.mjs";
+import { registerItemPiles } from "./item-piles.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -114,6 +115,7 @@ Hooks.once("init", () => {
     registerMedicalKit();
     registerDose(MODULE_ID);
     registerMoveConfirm(MODULE_ID);
+    registerItemPiles(MODULE_ID);
     game.settings.register(MODULE_ID, "itemsAsEquipment", {
       name: "PFM.Settings.ItemsAsEquipment.Name",
       hint: "PFM.Settings.ItemsAsEquipment.Hint",
