@@ -9,6 +9,7 @@
 // before you build, or the build fails with a lock error.
 
 import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { compilePack } from "@foundryvtt/foundryvtt-cli";
 
 const root = new URL("../packs/", import.meta.url);
@@ -17,6 +18,6 @@ const packs = readdirSync(new URL("_source/", root), { withFileTypes: true }).fi
 for (const pack of packs) {
   const src = new URL(`_source/${pack}`, root);
   const dest = new URL(pack, root);
-  await compilePack(src.pathname.replace(/^\/(\w:)/, "$1"), dest.pathname.replace(/^\/(\w:)/, "$1"), { log: true });
+  await compilePack(fileURLToPath(src), fileURLToPath(dest), { log: true });
 }
 console.log(`Built ${packs.length} pack(s): ${packs.join(", ")}`);

@@ -59,6 +59,11 @@ export const getsShakes = (stateBeforeRest) => (stateBeforeRest?.level ?? 0) > 0
 /** Addiction after Fragile Calm shatters (the hero goes Insane again before their Rest): the crash adds 1 level. */
 export const afterShatter = (state) => ({ level: (state?.level ?? 0) + 1, dosed: !!state?.dosed });
 
+/** True when the change to a chat message is the GM reversing (un-confirming) a card for this action id. */
+export function isActionReverse(crucibleFlags, changed, actionId) {
+  return crucibleFlags?.action?.id === actionId && changed?.flags?.crucible?.confirmed === false;
+}
+
 /** True when the change to a chat message is the GM confirming a card for this action id. */
 export function isActionConfirm(crucibleFlags, changed, actionId) {
   return crucibleFlags?.action?.id === actionId && changed?.flags?.crucible?.confirmed === true;

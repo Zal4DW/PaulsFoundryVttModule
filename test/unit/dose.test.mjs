@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { addictionPenalty, afterDose, afterRest, afterShatter, canTakeDose, DOSE_ACTION, DOSE_ADDICTION, DOSE_HEALING, doseHealing, getsShakes,
-  isActionConfirm, SHAKES_HOURS, withoutMadnessRecovery } from "../../scripts/lib/dose.mjs";
+  isActionConfirm, isActionReverse, SHAKES_HOURS, withoutMadnessRecovery } from "../../scripts/lib/dose.mjs";
 
 const SHODDY = -2, STANDARD = 0, FINE = 1, SUPERIOR = 2, MASTERWORK = 3;
 const source = new URL("../../packs/_source/items/", import.meta.url);
@@ -76,6 +76,14 @@ describe("canTakeDose", () => {
 
   it("lets an Insane hero take one at any time, since they cannot Rest", () => {
     expect(canTakeDose({ insane: true, lastActionId: "strike" })).toBe(true);
+  });
+});
+
+describe("isActionReverse", () => {
+  it("is true only when the GM reverses a confirmed card for that action", () => {
+    expect(isActionReverse({ action: { id: "rest" } }, { flags: { crucible: { confirmed: false } } }, "rest")).toBe(true);
+    expect(isActionReverse({ action: { id: "rest" } }, { flags: { crucible: { confirmed: true } } }, "rest")).toBe(false);
+    expect(isActionReverse({ action: { id: "rest" } }, { flags: { other: 1 } }, "rest")).toBe(false);
   });
 });
 

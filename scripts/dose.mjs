@@ -6,7 +6,7 @@
 // An addicted hero who Rests without a dose wakes with "The Shakes": 1 bane on attacks, spells and checks for 4 hours.
 // Any dose ends The Shakes.
 // Addiction lives on an "Addicted (N)" Active Effect, so players see it on the sheet.
-import { afterDose, afterRest, afterShatter, canTakeDose, isActionConfirm, DOSE_ACTION, doseHealing, getsShakes, SHAKES_HOURS,
+import { afterDose, afterRest, afterShatter, canTakeDose, isActionConfirm, isActionReverse, DOSE_ACTION, doseHealing, getsShakes, SHAKES_HOURS,
   withoutMadnessRecovery } from "./lib/dose.mjs";
 
 /** The addiction effect's id, fixed so each actor has at most one. */
@@ -70,6 +70,29 @@ export async function setAddiction(moduleId, actor, state) {
   return actor.createEmbeddedDocuments("ActiveEffect", [{ _id: EFFECT_ID, img: ICON, ...foundry.utils.expandObject(data) }], { keepId: true });
 }
 
+/**
+ * An actor's addiction before a card changes it (null when they have none), and for a Rest card their Shakes too.
+ * A dose card ends The Shakes through its own events, which Crucible reverses, so its snapshot leaves them out.
+ */
+function takeSnapshot(moduleId, actor, { shakes = false } = {}) {
+  const snap = { addiction: actor.effects.has(EFFECT_ID) ? getAddiction(moduleId, actor) : null };
+  if (shakes) snap.shakes = actor.effects.get(SHAKES_ID)?.toObject() ?? null;
+  return snap;
+}
+
+/** Put back each actor's addiction and Shakes from a reversed card's snapshot, then clear it so a re-confirm applies again. */
+async function restoreSnapshot(moduleId, message, snapshot) {
+  for (const saved of snapshot) {
+    const actor = await fromUuid(saved.uuid);
+    if (!actor) continue;
+    await setAddiction(moduleId, actor, saved.addiction ?? { level: 0, dosed: false });
+    if (!("shakes" in saved)) continue;
+    await actor.effects.get(SHAKES_ID)?.delete();
+    if (saved.shakes) await actor.createEmbeddedDocuments("ActiveEffect", [saved.shakes], { keepId: true });
+  }
+  await message.unsetFlag(moduleId, "undo");
+}
+
 /** The actors a confirmed card affects: its targets, or the actor who used it when it has none. */
 async function cardActors(flags) {
   const uuids = flags.targets?.length ? flags.targets.map((t) => t.actor) : [flags.actor];
@@ -120,14 +143,27 @@ export function registerDose(moduleId) {
   }
 
   // updateChatMessage fires on every client; only the active GM writes the addiction, so it changes once.
+  // Before a confirmed dose or Rest card changes anything, the GM saves each actor's addiction and Shakes on the card.
+  // Reversing the card puts them back. A card that already holds a snapshot is not applied twice.
   Hooks.on("updateChatMessage", async (message, changed) => {
     if (!isActiveGM()) return;
     const flags = message.flags?.crucible;
-    if (isActionConfirm(flags, changed, DOSE_ACTION)) {
+    const id = [DOSE_ACTION, "rest"].find((a) => flags?.action?.id === a);
+    if (!id) return;
+    const snapshot = message.getFlag(moduleId, "undo");
+    if (isActionReverse(flags, changed, id)) {
+      if (snapshot) await restoreSnapshot(moduleId, message, snapshot);
+      return;
+    }
+    if (!isActionConfirm(flags, changed, id) || snapshot) return;
+    const actors = await cardActors(id === "rest" ? { actor: flags.actor } : flags);
+    // A list, not an object keyed by uuid: setFlag would split the dots in "Actor.abc" into nested keys.
+    await message.setFlag(moduleId, "undo", actors.map((a) => ({ uuid: a.uuid, ...takeSnapshot(moduleId, a, { shakes: id === "rest" }) })));
+    if (id === DOSE_ACTION) {
       const bonus = qualityBonus(message);
-      for (const actor of await cardActors(flags)) await setAddiction(moduleId, actor, afterDose(getAddiction(moduleId, actor), bonus));
-    } else if (isActionConfirm(flags, changed, "rest")) {
-      for (const actor of await cardActors({ actor: flags.actor })) {
+      for (const actor of actors) await setAddiction(moduleId, actor, afterDose(getAddiction(moduleId, actor), bonus));
+    } else {
+      for (const actor of actors) {
         if (!actor.effects.has(EFFECT_ID)) continue;
         const before = getAddiction(moduleId, actor);
         await setAddiction(moduleId, actor, afterRest(before));
