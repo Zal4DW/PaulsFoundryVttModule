@@ -22,3 +22,4 @@ Thumbs.db
 # Compiled compendium packs. Build them from packs/_source with npm run build:packs.
 packs/*
 !packs/_source/
+module.zip

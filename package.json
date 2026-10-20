@@ -11,7 +11,8 @@
     "foundry:up": "node tools/foundry-init.mjs && docker compose up --detach",
     "foundry:down": "docker compose down",
     "foundry:logs": "docker compose logs --follow foundry",
-    "build:packs": "node tools/build-packs.mjs"
+    "build:packs": "node tools/build-packs.mjs",
+    "release:zip": "node tools/release-zip.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

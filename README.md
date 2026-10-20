@@ -52,4 +52,4 @@ Each addiction level takes a flat amount off a dose, more at each level: 1, 3, 6
 
 A Docker Foundry v14 server, ESLint, Vitest, Quench and a Playwright smoke test are set up. See [docs/testing.md](docs/testing.md).
 
-Compendium content lives as JSON in `packs/_source/<pack>/`, one file per document. `npm run build:packs` compiles it into the LevelDB folders under `packs/`, which are gitignored. Return to Setup before a rebuild, because Foundry locks a pack while a world uses it. A release zip must include the built `packs/` folders and `assets/`.
+Compendium content lives as JSON in `packs/_source/<pack>/`, one file per document. `npm run build:packs` compiles it into the LevelDB folders under `packs/`, which are gitignored. Return to Setup before a rebuild, because Foundry locks a pack while a world uses it. For a release, `npm run release:zip -- v<version>` builds the packs and writes `module.zip`: the tracked module files at that tag plus the built pack files, which a plain `git archive` would leave out.
