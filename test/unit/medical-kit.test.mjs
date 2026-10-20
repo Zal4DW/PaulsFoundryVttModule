@@ -49,6 +49,10 @@ describe("Wound Medical Kit item", () => {
     for (const amount of Object.values(WOUND_KIT_HEALING)) expect(text).toContain(`Recover ${amount} <strong>Wounds`);
   });
 
+  it("tells players in its flavour text that it treats Wounds after a Rest", () => {
+    expect(kit.system.description.public).toContain("after a Rest to treat <strong>Wounds</strong>");
+  });
+
   it("uses an icon that ships with the module", () => {
     for (const img of [kit.img, kit.system.actions[0].img]) {
       expect(img.startsWith("modules/pauls-foundry-module/")).toBe(true);
