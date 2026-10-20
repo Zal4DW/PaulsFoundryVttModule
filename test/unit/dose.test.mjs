@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addictionPenalty, afterDose, afterRest, afterShatter, canTakeDose, DOSE_ACTION, DOSE_ADDICTION, DOSE_HEALING, doseHealing, isActionConfirm, withoutMadnessRecovery } from "../../scripts/lib/dose.mjs";
+import { addictionPenalty, afterDose, afterRest, afterShatter, canTakeDose, DOSE_ACTION, DOSE_ADDICTION, DOSE_HEALING, doseHealing, getsShakes,
+  isActionConfirm, SHAKES_HOURS, withoutMadnessRecovery } from "../../scripts/lib/dose.mjs";
 
 const SHODDY = -2, STANDARD = 0, FINE = 1, SUPERIOR = 2, MASTERWORK = 3;
 const source = new URL("../../packs/_source/items/", import.meta.url);
@@ -112,5 +113,21 @@ describe("afterShatter", () => {
   it("adds 1 addiction when Fragile Calm shatters, and keeps the night's dose on record", () => {
     expect(afterShatter({ level: 2, dosed: true })).toEqual({ level: 3, dosed: true });
     expect(afterShatter(undefined)).toEqual({ level: 1, dosed: false });
+  });
+});
+
+describe("getsShakes", () => {
+  it("gives The Shakes after a clean Rest while addicted", () => {
+    expect(getsShakes({ level: 1, dosed: false })).toBe(true);
+  });
+
+  it("gives none after a night on the stuff, or to a hero who is not addicted", () => {
+    expect(getsShakes({ level: 4, dosed: true })).toBe(false);
+    expect(getsShakes({ level: 0, dosed: false })).toBe(false);
+    expect(getsShakes(undefined)).toBe(false);
+  });
+
+  it("lasts 4 hours", () => {
+    expect(SHAKES_HOURS).toBe(4);
   });
 });

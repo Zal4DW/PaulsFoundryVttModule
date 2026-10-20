@@ -50,6 +50,12 @@ export const canTakeDose = ({ insane, lastActionId }) => !!insane || lastActionI
  */
 export const withoutMadnessRecovery = (resources) => resources.filter((r) => !(r.resource === "madness" && r.delta < 0));
 
+/** How long The Shakes last after a clean Rest, in hours of game time. */
+export const SHAKES_HOURS = 4;
+
+/** Withdrawal: an addicted hero who rests without a dose wakes with The Shakes (1 bane for 4 hours). */
+export const getsShakes = (stateBeforeRest) => (stateBeforeRest?.level ?? 0) > 0 && !stateBeforeRest?.dosed;
+
 /** Addiction after Fragile Calm shatters (the hero goes Insane again before their Rest): the crash adds 1 level. */
 export const afterShatter = (state) => ({ level: (state?.level ?? 0) + 1, dosed: !!state?.dosed });
 

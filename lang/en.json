@@ -203,5 +203,7 @@
   "PFM.Dose.AfterRestOrInsane": "You may only take {action} straight after a Rest, unless you are Insane.",
   "PFM.Dose.FragileCalm": "Fragile Calm",
   "PFM.Dose.FragileCalmHint": "<p>A Dose of It'll Be Alright... dragged this mind back from Insanity. The next Rest restores no Madness. If Madness fills up again before then, the calm shatters and addiction rises by 1.</p>",
-  "PFM.Dose.Shattered": "{actor}'s Fragile Calm shatters. The crash leaves them Insane again, and their addiction rises to {level}."
+  "PFM.Dose.Shattered": "{actor}'s Fragile Calm shatters. The crash leaves them Insane again, and their addiction rises to {level}.",
+  "PFM.Dose.Shakes": "The Shakes",
+  "PFM.Dose.ShakesHint": "<p>Withdrawal from It'll Be Alright... after a night without a dose: 1 bane on attacks, spells and checks for 4 hours. Any dose ends it at once.</p>"
 }

@@ -3,8 +3,11 @@
 // When the GM confirms a Rest card, the addiction drops by 1 unless the hero dosed since the last Rest.
 // A dose that breaks Insanity leaves "Fragile Calm": the next Rest restores no Madness, so the cure buys no free recovery.
 // If Madness fills up again before that Rest, the calm shatters and the crash adds 1 addiction.
+// An addicted hero who Rests without a dose wakes with "The Shakes": 1 bane on attacks, spells and checks for 4 hours.
+// Any dose ends The Shakes.
 // Addiction lives on an "Addicted (N)" Active Effect, so players see it on the sheet.
-import { afterDose, afterRest, afterShatter, canTakeDose, isActionConfirm, DOSE_ACTION, doseHealing, withoutMadnessRecovery } from "./lib/dose.mjs";
+import { afterDose, afterRest, afterShatter, canTakeDose, isActionConfirm, DOSE_ACTION, doseHealing, getsShakes, SHAKES_HOURS,
+  withoutMadnessRecovery } from "./lib/dose.mjs";
 
 /** The addiction effect's id, fixed so each actor has at most one. */
 const EFFECT_ID = "pfmAddiction0000";
@@ -12,6 +15,10 @@ const ICON = "modules/pauls-foundry-module/assets/icons/alright-dose.webp";
 
 /** The Fragile Calm effect's id: a dose broke this hero's Insanity, so their next Rest restores no Madness. */
 const CALM_ID = "pfmFragileCalm00";
+
+/** The Shakes effect's id: withdrawal after a clean Rest while addicted. */
+const SHAKES_ID = "pfmTheShakes0000";
+const SHAKES_ICON = "icons/svg/daze.svg";
 
 const isActiveGM = () => game.user.isGM && game.users.activeGM?.id === game.user.id;
 
@@ -23,6 +30,27 @@ const fragileCalm = (origin) => ({
   img: ICON,
   origin: origin?.uuid
 });
+
+/**
+ * Withdrawal: The Shakes, 1 bane on attacks, spells and checks for 4 hours of game time. Crucible reads banes from
+ * system.rollBonuses.banes, the same way its own Hexed condition applies one. Recreated fresh on each clean Rest.
+ */
+async function addShakes(actor) {
+  const name = game.i18n.localize("PFM.Dose.Shakes");
+  await actor.effects.get(SHAKES_ID)?.delete();
+  return actor.createEmbeddedDocuments("ActiveEffect", [{
+    _id: SHAKES_ID, name, img: SHAKES_ICON,
+    description: game.i18n.localize("PFM.Dose.ShakesHint"),
+    start: { time: game.time.worldTime },
+    duration: { value: SHAKES_HOURS, units: "hours" },
+    system: {
+      changes: [
+        { key: "system.rollBonuses.banes.pfmShakes.number", type: "override", value: 1, phase: "initial" },
+        { key: "system.rollBonuses.banes.pfmShakes.label", type: "override", value: name, phase: "initial" }
+      ]
+    }
+  }], { keepId: true });
+}
 
 /** An actor's addiction state, or level 0 when it has none. */
 export function getAddiction(moduleId, actor) {
@@ -63,9 +91,13 @@ export function registerDose(moduleId) {
       const bonus = this.usage.consumable?.config?.quality?.bonus ?? 0;
       for (const [target] of this.targets) {
         const delta = doseHealing(bonus, getAddiction(moduleId, target).level, target.system.resources.madness?.value);
+        const effects = [];
         // A dose that breaks Insanity marks the hero, so the Rest it unlocks restores no Madness (see the rest hook below).
-        const effects = delta > 0 && target.system.isInsane ? [fragileCalm(this.actor)] : [];
-        if (delta > 0) this.recordEvent({ target, resources: [{ resource: "madness", delta: -delta }], effects });
+        if (delta > 0 && target.system.isInsane) effects.push(fragileCalm(this.actor));
+        // Any dose ends The Shakes, even one too weak to clear Madness: it feeds the craving.
+        if (target.effects.has(SHAKES_ID)) effects.push({ _id: SHAKES_ID, _action: "delete" });
+        const resources = delta > 0 ? [{ resource: "madness", delta: -delta }] : [];
+        if (resources.length || effects.length) this.recordEvent({ target, resources, effects });
       }
     }
   };
@@ -96,9 +128,19 @@ export function registerDose(moduleId) {
       for (const actor of await cardActors(flags)) await setAddiction(moduleId, actor, afterDose(getAddiction(moduleId, actor), bonus));
     } else if (isActionConfirm(flags, changed, "rest")) {
       for (const actor of await cardActors({ actor: flags.actor })) {
-        if (actor.effects.has(EFFECT_ID)) await setAddiction(moduleId, actor, afterRest(getAddiction(moduleId, actor)));
+        if (!actor.effects.has(EFFECT_ID)) continue;
+        const before = getAddiction(moduleId, actor);
+        await setAddiction(moduleId, actor, afterRest(before));
+        if (getsShakes(before)) await addShakes(actor);
       }
     }
+  });
+
+  // A party Rest advances the clock by 10 hours after the Rest cards, so The Shakes would start before the hero woke.
+  // Restart them at the new world time once the Rest is over.
+  Hooks.on("crucible.groupRest", async (_group, _config, participants) => {
+    if (!isActiveGM()) return;
+    for (const actor of participants ?? []) await actor.effects.get(SHAKES_ID)?.update({ "start.time": game.time.worldTime });
   });
 
   // Fragile Calm shatters when Madness fills up again before the Rest: the calm goes, and the crash adds 1 addiction.
