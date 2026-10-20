@@ -64,6 +64,7 @@ export function fateLine(s, stats) {
   if (killed) return `Defeated by ${stats.combatants[killed.by]?.name ?? "?"} in round ${killed.round ?? "?"}`;
   if (s.finalStatuses?.includes("dead")) return "Dead";
   if (s.finalStatuses?.includes("insane")) return `Insane${wounds}`;
+  if (s.fled) return st?.health ? `Fled at ${st.health.value} of ${st.health.max} health` : "Fled";
   if (s.side === "adversary" && stats.outcome?.result === "defeat") return `Victorious${st?.health?.value === 0 ? `: fought on at 0 health${wounds}` : ""}${kills}`;
   if (st?.health && st.health.value === 0) return `Still fighting at 0 health${wounds}${kills}`;
   if (st?.health) return `Standing at ${st.health.value} of ${st.health.max} health${kills}`;
