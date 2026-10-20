@@ -8,6 +8,8 @@ import { registerStatsSettings, updateLog, flushLog } from "./stats/store.mjs";
 import { registerGripToggle, toggleGrip } from "./grip.mjs";
 import { importHistory } from "./stats/history.mjs";
 import { dismissTosslight, placeTosslight, registerTosslight } from "./tosslight.mjs";
+import { registerMedicalKit } from "./medical-kit.mjs";
+import { getAddiction, registerDose, setAddiction } from "./dose.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -103,10 +105,13 @@ Hooks.once("init", () => {
   // Fight stats. Every user can read them; the GM client records them. A change re-draws open dashboards.
   registerStatsSettings(MODULE_ID, () => { if (statsApp?.rendered) statsApp.render(); });
 
-  // Crucible only: a grip toggle for Versatile weapons on actor sheets, and Reveal's tosslight as real token light.
+  // Crucible only: a grip toggle for Versatile weapons on actor sheets, Reveal's tosslight as real token light,
+  // the Wound Medical Kit and the Dose of It'll Be Alright... with its addiction.
   if (game.system.id === "crucible") {
     registerGripToggle();
     registerTosslight(MODULE_ID);
+    registerMedicalKit();
+    registerDose(MODULE_ID);
   }
 
   // Public API, used by macros and by the Quench tests.
@@ -114,6 +119,11 @@ Hooks.once("init", () => {
     importHistory: (options) => importHistory(MODULE_ID, options), promptImportHistory,
     placeTosslight: (token, casterUuid) => placeTosslight(MODULE_ID, token, casterUuid),
     dismissTosslight: (token) => dismissTosslight(MODULE_ID, token),
+    getAddiction: (actor) => getAddiction(MODULE_ID, actor).level,
+    setAddiction: (actor, level) => {
+      if (!Number.isFinite(level)) throw new Error(`setAddiction needs a finite number for the level, not ${level}`);
+      return setAddiction(MODULE_ID, actor, { level: Math.max(0, Math.floor(level)), dosed: false });
+    },
     rebuildFight: (fightId) => rebuildFight(MODULE_ID, fightId),
     addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
     setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),

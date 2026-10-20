@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const manifest = JSON.parse(readFileSync(new URL("../../module.json", import.meta.url), "utf8"));
@@ -21,6 +21,15 @@ describe("module.json", () => {
   it("lists files that exist", () => {
     for (const path of [...manifest.esmodules, ...manifest.styles, ...manifest.languages.map((l) => l.path)]) {
       expect(() => readFileSync(new URL(`../../${path}`, import.meta.url))).not.toThrow();
+    }
+  });
+
+  it("gives each Item pack a system and a JSON source folder to build it from", () => {
+    // Foundry requires a system on Actor, Item and Adventure packs. The LevelDB folder itself is built, not committed.
+    for (const pack of manifest.packs ?? []) {
+      if (["Actor", "Item", "Adventure"].includes(pack.type)) expect(pack.system).toBe("crucible");
+      expect(pack.path).toBe(`packs/${pack.name}`);
+      expect(() => readdirSync(new URL(`../../packs/_source/${pack.name}`, import.meta.url))).not.toThrow();
     }
   });
 });

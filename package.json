@@ -10,10 +10,13 @@
     "test:e2e": "playwright test",
     "foundry:up": "node tools/foundry-init.mjs && docker compose up --detach",
     "foundry:down": "docker compose down",
-    "foundry:logs": "docker compose logs --follow foundry"
+    "foundry:logs": "docker compose logs --follow foundry",
+    "build:packs": "node tools/build-packs.mjs",
+    "release:zip": "node tools/release-zip.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@foundryvtt/foundryvtt-cli": "^3.0.5",
     "@playwright/test": "^1.64.1",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",

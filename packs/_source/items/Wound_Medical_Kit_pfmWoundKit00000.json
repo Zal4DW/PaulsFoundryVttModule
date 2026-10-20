@@ -1,0 +1,76 @@
+{
+  "_id": "pfmWoundKit00000",
+  "_key": "!items!pfmWoundKit00000",
+  "name": "Wound Medical Kit",
+  "type": "consumable",
+  "img": "modules/pauls-foundry-module/assets/icons/wound-medical-kit.webp",
+  "system": {
+    "identifier": "pfmWoundKit",
+    "category": "kit",
+    "quantity": 1,
+    "weight": 1,
+    "price": 300,
+    "quality": "standard",
+    "broken": false,
+    "equipped": false,
+    "invested": false,
+    "properties": [
+      "stackable"
+    ],
+    "description": {
+      "public": "<p>A roll of clean linen, a pot of herbal salve, needle and gut, and a small bottle of spirit for washing wounds. With a night's rest to work in, a careful hand can close injuries that rest alone would leave open for days.</p>",
+      "private": "<h2>GM notes</h2><ul><li><p>Crucible’s Rest removes only level-many Wounds, so a level 1 hero gets back 1 Wound a night. The kit closes that gap without making Wounds free.</p></li><li><p>Standard (5 Wounds, 3 gp) matches the cleric Briannon in Ember’s Glinthome, who heals 5 Wounds for 1 gp. The temple is cheaper; the kit works in the field.</p></li><li><p>One kit per hero per Rest, used straight after the Rest, on themselves or an adjacent ally. Never in combat.</p></li><li><p>Prices scale by quality from the 3 gp base: 1.5 / 3 / 24 / 81 / 375 gp for 3 / 5 / 10 / 20 / 40 Wounds.</p></li><li><p>A natural seller is the alchemy room at Traveler’s Rest in Ordain, where the Cindarics brew curative draughts.</p></li><li><p>For Crucible Shop’s default shop, add “Paul’s Items” under Crucible’s system settings, Compendium Sources, Equipment.</p></li></ul>"
+    },
+    "actions": [
+      {
+        "id": "pfmWoundKit",
+        "name": "Treat Wounds",
+        "img": "modules/pauls-foundry-module/assets/icons/wound-medical-kit.webp",
+        "condition": "",
+        "description": "<p>Use the @ref[item.name] straight after a Rest to treat yourself or an adjacent ally. The target recovers @Rule[resource.wounds]{Wounds} dependent on the quality of the kit, on top of what the Rest restored. Each hero can use one kit per Rest.</p><ul><li><p><strong>Shoddy</strong> - Recover 3 <strong>Wounds</strong>.</p></li><li><p><strong>Standard</strong> - Recover 5 <strong>Wounds</strong>.</p></li><li><p><strong>Fine</strong> - Recover 10 <strong>Wounds</strong>.</p></li><li><p><strong>Superior</strong> - Recover 20 <strong>Wounds</strong>.</p></li><li><p><strong>Masterwork</strong> - Recover 40 <strong>Wounds</strong>.</p></li></ul>",
+        "cost": {
+          "action": 0,
+          "focus": 0,
+          "heroism": 0,
+          "weapon": false,
+          "hands": 0
+        },
+        "range": {
+          "minimum": null,
+          "maximum": 1,
+          "weapon": false
+        },
+        "target": {
+          "type": "single",
+          "number": 1,
+          "scope": 4,
+          "self": true
+        },
+        "effects": [],
+        "tags": [
+          "consume",
+          "rest"
+        ],
+        "summon": null,
+        "persistRegion": false,
+        "regionBehavior": null
+      }
+    ],
+    "uses": {
+      "value": 1,
+      "max": 1
+    },
+    "scroll": {
+      "runes": [],
+      "gestures": [],
+      "inflections": []
+    }
+  },
+  "effects": [],
+  "folder": null,
+  "sort": 0,
+  "ownership": {
+    "default": 0
+  },
+  "flags": {}
+}
