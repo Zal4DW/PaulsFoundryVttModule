@@ -48,6 +48,17 @@ A back-alley tonic in "Paul's Items" that clears Madness and leaves an addiction
 
 Each addiction level takes a flat amount off a dose, more at each level: 1, 3, 6, 10, 15, 21, 28, 36 Madness at levels 1 to 8. Cheap doses stop working quickly, and stronger ones still get through. A Rest lowers addiction by 1, but only if the hero took no dose since their last Rest. The hero's sheet shows the level as an "Addicted (N)" effect. Withdrawal: an addicted hero who Rests without a dose wakes with "The Shakes", 1 bane on attacks, spells and checks for 4 hours of game time. Any dose ends The Shakes at once. GM notes with the full tolerance table are in each item's Secret Description, which only GMs see. Macros can read or set a hero's addiction with `game.modules.get("pauls-foundry-module").api.getAddiction(actor)` and `.setAddiction(actor, level)`. An Insane hero cannot Rest, so they may take a dose at any time out of combat, and it is the only thing that brings them back. That dose leaves a "Fragile Calm": their next Rest restores no Madness, so the cure buys no free recovery. If Madness fills up before that Rest, the calm shatters: the hero is Insane once more and their addiction rises by 1.
 
+## Crucible: confirm my own movement
+
+Crucible's "auto-confirm self actions" setting has the GM's client confirm every Move card at once. That suits the GM, but a player still learning token edges and waypoints makes mistakes that the GM then has to undo. Each player can turn on "Confirm my own movement" in their module settings:
+
+- Their Move cards wait for them. The token moves, but no AP is spent until the card is confirmed.
+- Ctrl+Z takes a pending move back for free.
+- A "Confirm move" button on their own card confirms it. The GM does not have to.
+- Their next action confirms a pending move first. A second drag while a move is pending confirms it and asks them to drag again, because Crucible checks a move's AP before the earlier move has spent any. When their turn ends, the GM's client confirms anything still pending.
+
+The GM's own auto-confirm setting is unchanged, and players who leave it off see no difference.
+
 ## Development
 
 A Docker Foundry v14 server, ESLint, Vitest, Quench and a Playwright smoke test are set up. See [docs/testing.md](docs/testing.md).

@@ -17,6 +17,8 @@
   "PFM.Tosslight.Taken": "{token} already carries another caster's tosslight.",
   "PFM.Settings.RevealLight.Name": "Reveal makes light (Crucible)",
   "PFM.Settings.RevealLight.Hint": "When the GM confirms a Reveal card, the target's token (or the caster's, with no target) gets a tosslight: bright 20 ft, dim 40 ft. Each caster has one at a time. Dismiss it from the token HUD.",
+  "PFM.Settings.ConfirmOwnMoves.Name": "Confirm my own movement (Crucible)",
+  "PFM.Settings.ConfirmOwnMoves.Hint": "For players learning to move. When the GM auto-confirms self actions, your Move cards wait for you instead: the token moves but no AP is spent, so Ctrl+Z takes a mistake back for free. Click Confirm on the card when you are happy. Your next action, or the end of your turn, confirms it for you.",
   "PFM.Settings.ItemsAsEquipment.Name": "Paul's Items in shops and character creation (Crucible)",
   "PFM.Settings.ItemsAsEquipment.Hint": "Adds the Paul's Items compendium to Crucible's equipment, so Crucible Shop's default shop sells the Wound Medical Kit and It'll Be Alright..., and character creation offers them. Turn off and the module stops adding them. If you list Paul's Items in Crucible's own Compendium Sources, Crucible still uses it.",
   "PFM.Settings.KeepCoreHotbar.Name": "Keep Foundry's Hotbar with Crucible Tongs",
@@ -207,5 +209,7 @@
   "PFM.Dose.FragileCalmHint": "<p>A Dose of It'll Be Alright... dragged this mind back from Insanity. The next Rest restores no Madness. If Madness fills up again before then, the calm shatters and addiction rises by 1.</p>",
   "PFM.Dose.Shattered": "{actor}'s Fragile Calm shatters. The crash leaves them Insane again, and their addiction rises to {level}.",
   "PFM.Dose.Shakes": "The Shakes",
-  "PFM.Dose.ShakesHint": "<p>Withdrawal from It'll Be Alright... after a night without a dose: 1 bane on attacks, spells and checks for 4 hours. Any dose ends it at once.</p>"
+  "PFM.Dose.ShakesHint": "<p>Withdrawal from It'll Be Alright... after a night without a dose: 1 bane on attacks, spells and checks for 4 hours. Any dose ends it at once.</p>",
+  "PFM.MoveConfirm.Confirm": "Confirm move",
+  "PFM.MoveConfirm.ConfirmedDragAgain": "Your last move for {name} is now confirmed. Drag again to make the next one."
 }
