@@ -157,3 +157,9 @@ describe("GM notes on the dose", () => {
     expect(notes).toContain("api.setAddiction(actor, level)");
   });
 });
+
+describe("dose flavour text", () => {
+  it("tells players it can bring back an Insane mind, since that is its main draw", () => {
+    expect(dose.system.description.public).toMatch(/drag a mind back/);
+  });
+});
