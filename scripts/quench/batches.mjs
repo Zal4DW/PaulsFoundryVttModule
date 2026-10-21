@@ -244,8 +244,12 @@ export function registerQuenchBatches(quench, moduleId) {
           if (!ui.combat?._getEntryContextOptions) this.skip();
           // Capture the array the hook receives: _doEvent is documented as returning void.
           let items = null;
-          Hooks.once("getCombatTrackerContextOptions", (_app, menuItems) => { items = menuItems; });
-          ui.combat._doEvent(ui.combat._getEntryContextOptions, { hookName: "get{}ContextOptions", hookResponse: true });
+          const hookId = Hooks.on("getCombatTrackerContextOptions", (_app, menuItems) => { items = menuItems; });
+          try {
+            ui.combat._doEvent(ui.combat._getEntryContextOptions, { hookName: "get{}ContextOptions", hookResponse: true });
+          } finally {
+            Hooks.off("getCombatTrackerContextOptions", hookId);
+          }
           assert.isArray(items, "getCombatTrackerContextOptions did not fire for the combatant row menu");
           const labels = items.map((i) => i.label ?? i.name);
           assert.include(labels, "PFM.Stats.Fled.Mark");

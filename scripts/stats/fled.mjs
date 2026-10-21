@@ -36,7 +36,7 @@ export function registerFled(moduleId) {
       {
         label: "PFM.Stats.Fled.Clear",
         icon: "fa-solid fa-person-walking-arrow-loop-left",
-        visible: (li) => game.user.isGM && fled(li),
+        visible: (li) => game.user.isGM && canFlee(moduleId, combatantOf(app, li)) && fled(li),
         onClick: (_event, li) => combatantOf(app, li)?.unsetFlag(moduleId, FLED_FLAG)
       }
     );
