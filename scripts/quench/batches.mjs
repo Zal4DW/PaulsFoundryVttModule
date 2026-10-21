@@ -242,7 +242,11 @@ export function registerQuenchBatches(quench, moduleId) {
         // fails if Foundry stops firing getCombatTrackerContextOptions for combatant rows.
         it("adds Mark as fled and Clear fled to the combatant row menu", function () {
           if (!ui.combat?._getEntryContextOptions) this.skip();
-          const items = ui.combat._doEvent(ui.combat._getEntryContextOptions, { hookName: "get{}ContextOptions", hookResponse: true });
+          // Capture the array the hook receives: _doEvent is documented as returning void.
+          let items = null;
+          Hooks.once("getCombatTrackerContextOptions", (_app, menuItems) => { items = menuItems; });
+          ui.combat._doEvent(ui.combat._getEntryContextOptions, { hookName: "get{}ContextOptions", hookResponse: true });
+          assert.isArray(items, "getCombatTrackerContextOptions did not fire for the combatant row menu");
           const labels = items.map((i) => i.label ?? i.name);
           assert.include(labels, "PFM.Stats.Fled.Mark");
           assert.include(labels, "PFM.Stats.Fled.Clear");

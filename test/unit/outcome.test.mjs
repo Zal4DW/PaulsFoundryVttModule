@@ -195,3 +195,10 @@ describe("fled adversaries", () => {
     expect(stats.outcome.result).toBe("victory");
   });
 });
+
+describe("fled heroes and companions", () => {
+  it("still count as standing, so they can never turn a fight into a false defeat", () => {
+    expect(fightOutcome({ A: hero("A", { fled: true }), X: foe("X", { rank: "elite" }) }).result).toBe("undecided");
+    expect(fightOutcome({ A: hero("A"), T: foe("T", { ally: true, fled: true }), X: foe("X", { dead: true }) }).result).toBe("victory");
+  });
+});

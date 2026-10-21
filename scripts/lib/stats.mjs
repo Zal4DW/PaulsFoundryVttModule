@@ -307,7 +307,7 @@ export function sideOf(key, m) {
  * A combatant out of the fight: dead, insane, (for minions and ordinary adversaries) defeated, or fled.
  * A GM marks a fleeing adversary from the combat tracker (scripts/stats/fled.mjs). It left the fight, so it counts as beaten.
  */
-export const isOut = (m) => !!m?.dead || !!m?.fled || (m?.statuses ?? []).some((x) => x === "dead" || x === "insane");
+export const isOut = (m) => !!m?.dead || (!!m?.fled && m?.type !== "hero" && !m?.ally) || (m?.statuses ?? []).some((x) => x === "dead" || x === "insane");
 
 /**
  * The result of a fight from who is left standing. A GM override wins.
