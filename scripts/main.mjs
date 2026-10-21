@@ -12,6 +12,8 @@ import { registerMedicalKit } from "./medical-kit.mjs";
 import { getAddiction, registerDose, setAddiction } from "./dose.mjs";
 import { registerMoveConfirm, syncMoveConfirmFlag } from "./move-confirm.mjs";
 import { registerItemPiles } from "./item-piles.mjs";
+import { registerHiddenCollision } from "./hidden-collision.mjs";
+import { registerElevationBadge } from "./elevation-badge.mjs";
 import { registerFled } from "./stats/fled.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
@@ -44,6 +46,9 @@ Hooks.once("init", () => {
     default: false, // Tongs' Macro tab holds the same 50 macro slots, so hiding the duplicate is the default.
     onChange: () => applyCoreHotbarVisibility()
   });
+
+  // A badge and a ground shadow for tokens above the floor, so flyers stand out.
+  registerElevationBadge(MODULE_ID);
 
   // P opens the party sheet, for players and the GM. Keybindings must be registered during init.
   // Foundry does not run keybindings while the user types in a text field, so chat is not affected.
@@ -119,6 +124,7 @@ Hooks.once("init", () => {
     registerDose(MODULE_ID);
     registerMoveConfirm(MODULE_ID);
     registerItemPiles(MODULE_ID);
+    registerHiddenCollision();
     game.settings.register(MODULE_ID, "itemsAsEquipment", {
       name: "PFM.Settings.ItemsAsEquipment.Name",
       hint: "PFM.Settings.ItemsAsEquipment.Hint",
@@ -265,7 +271,21 @@ async function toggleSheet(actor) {
   const sheet = actor.sheet;
   if (!sheet.rendered) await sheet.render({ force: true });
   else if (sheet.minimized) await sheet.maximize();
-  else await sheet.close();
+  else return sheet.close();
+  controlCharacterToken(actor);
+}
+
+/**
+ * Control the actor's token on the viewed scene, so the token HUD and Crucible Tongs' hotbar
+ * (which shows the one controlled token's actor) switch to the character whose sheet just opened.
+ * Does nothing when the actor has no token here, or one of its tokens is already the only one controlled.
+ */
+function controlCharacterToken(actor) {
+  if (!canvas?.ready) return;
+  const tokens = actor.getActiveTokens();
+  const controlled = canvas.tokens.controlled;
+  if (controlled.length === 1 && tokens.includes(controlled[0])) return;
+  tokens.find((t) => t.isOwner && t.visible)?.control({ releaseOthers: true });
 }
 
 /**
@@ -322,7 +342,10 @@ async function chooseAndOpenCharacter() {
     buttons: decision.choices.map((choice, i) => ({ action: choice.id, label: label(choice), default: i === 0 })),
     rejectClose: false
   });
-  if (picked) await showSheet(actors.get(picked));
+  if (picked) {
+    await showSheet(actors.get(picked));
+    controlCharacterToken(actors.get(picked));
+  }
   return { mode: "pick", uuid: picked ?? undefined };
 }
 

@@ -72,6 +72,18 @@ Item Piles 3.3.4 shows its GM-only "Config Update" button in the loot window to 
 
 Item Piles keeps a GM's own edits to these settings, and applies this setup again only when a module update raises its version. Turn off "Set up Item Piles for Crucible" to configure Item Piles by hand.
 
+## Crucible: hidden tokens don't block players
+
+Crucible stops movement at other tokens' edges. It skips Secret-disposition tokens for players, but not hidden ones, so a player walks into an invisible wall wherever the GM has hidden an ambush. On player clients, the module makes hidden tokens exempt from that collision too. The GM's moves still collide with them.
+
+## Character sheet key and Crucible Tongs
+
+The module's C key opens your character's sheet. It now also selects that character's token on the scene, so the token HUD and [Crucible Tongs](https://github.com/Plushtoast/crucibletongs)' action bar, which follow the selected token, switch to the same character. Pressing C again to close the sheet leaves the selection alone.
+
+## Elevation badges
+
+Foundry shows a token's elevation as small plain text, easy to miss on a dark map. For any token above the floor of the viewed level, the module draws a badge behind that text and a ring with a dark wash on the ground below the token. The higher the token, the further the ring falls. Each user can turn it off with the "Show Elevation Badges" setting.
+
 ## Development
 
 A Docker Foundry v14 server, ESLint, Vitest, Quench and a Playwright smoke test are set up. See [docs/testing.md](docs/testing.md).
