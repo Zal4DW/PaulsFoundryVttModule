@@ -66,6 +66,9 @@ You need Docker Desktop, Node 20.19+, 22.13+ or 24+ (the range ESLint 10 support
 |---|---|---|---|
 | `pfm-test` | Crucible, no adventure | Paul's Foundry Module, Quench | Automated tests. Keep it bare. |
 | `pfm-ember` | Crucible with the Ember adventure imported | Ember and every installed module | Manual play testing with real content |
+| `pfm-ember-party` | A copy of `pfm-ember`, made 2026-10-21 at The Smoke Clears | Same as `pfm-ember` | Playing ahead along the route Paul's real party chooses. `pfm-ember` stays at that point, for trying out the AI co-GM "Narrator" idea. |
+
+To copy a world, shut it down first (Foundry locks its databases while it runs), copy the folder under `.foundry/data/Data/worlds/`, and change `id` and `title` in the copy's `world.json`. Restart the container so the setup screen lists it. Backups go in `.foundry/backups/` as `<world>-<date>-<note>.tgz`.
 
 `pfm-ember` has four level 1 heroes in the Party group, and `crucible.party` points at that group:
 
