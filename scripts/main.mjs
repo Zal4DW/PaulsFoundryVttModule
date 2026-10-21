@@ -14,6 +14,7 @@ import { registerMoveConfirm, syncMoveConfirmFlag } from "./move-confirm.mjs";
 import { registerItemPiles } from "./item-piles.mjs";
 import { registerHiddenCollision } from "./hidden-collision.mjs";
 import { registerElevationBadge } from "./elevation-badge.mjs";
+import { registerStashBridge } from "./stash-bridge.mjs";
 import { registerFled } from "./stats/fled.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
@@ -125,6 +126,7 @@ Hooks.once("init", () => {
     registerMoveConfirm(MODULE_ID);
     registerItemPiles(MODULE_ID);
     registerHiddenCollision();
+    registerStashBridge();
     game.settings.register(MODULE_ID, "itemsAsEquipment", {
       name: "PFM.Settings.ItemsAsEquipment.Name",
       hint: "PFM.Settings.ItemsAsEquipment.Hint",
