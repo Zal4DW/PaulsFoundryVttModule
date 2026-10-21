@@ -169,3 +169,36 @@ describe("heroes who were not in the fight", () => {
     expect(s.outcome.result).toBe("defeat");
   });
 });
+
+describe("fled adversaries", () => {
+  it("count as out: a fight is a victory when every major foe is dead or fled", () => {
+    const meta = { A: hero("A"), X: foe("X", { rank: "elite", fled: true }), Y: foe("Y", { rank: "boss", dead: true }), m: foe("m", { rank: "minion" }) };
+    expect(fightOutcome(meta)).toEqual({ result: "victory", reason: "every major adversary is down or fled", by: "auto" });
+  });
+
+  it("keep the plain reason when nothing fled", () => {
+    expect(fightOutcome({ A: hero("A"), X: foe("X", { rank: "elite", dead: true }) }).reason).toBe("every major adversary is down");
+  });
+
+  it("leave the fight undecided while another major foe still stands", () => {
+    const meta = { A: hero("A"), X: foe("X", { rank: "elite", fled: true }), Y: foe("Y", { rank: "elite" }) };
+    expect(fightOutcome(meta).result).toBe("undecided");
+  });
+
+  it("read as fled, with the health they left on, in the fate line", () => {
+    const meta = { A: hero("A"), S: foe("S", { name: "Suarrok Juvenile", rank: "elite", fled: true, state: { health: { value: 16, max: 93 } } }) };
+    const stats = aggregate([{ kind: "initiative", actor: "S", total: 20, position: 1, of: 2, round: 1 }], meta);
+    const s = stats.combatants.S;
+    expect(s.fled).toBe(true);
+    expect(s.out).toBe(true);
+    expect(fateLine(s, stats)).toBe("Fled at 16 of 93 health");
+    expect(stats.outcome.result).toBe("victory");
+  });
+});
+
+describe("fled heroes and companions", () => {
+  it("still count as standing, so they can never turn a fight into a false defeat", () => {
+    expect(fightOutcome({ A: hero("A", { fled: true }), X: foe("X", { rank: "elite" }) }).result).toBe("undecided");
+    expect(fightOutcome({ A: hero("A"), T: foe("T", { ally: true, fled: true }), X: foe("X", { dead: true }) }).result).toBe("victory");
+  });
+});

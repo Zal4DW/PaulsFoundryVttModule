@@ -41,13 +41,36 @@ export class StatsDashboard extends ApplicationV2 {
       view: StatsDashboard.#onView,
       hero: StatsDashboard.#onHero,
       fight: StatsDashboard.#onFight,
-      journal: StatsDashboard.#onJournal
+      journal: StatsDashboard.#onJournal,
+      setResult: StatsDashboard.#onSetResult
     }
   };
 
   static #onView(_event, target) { this.tab = target.dataset.tab; this.render(); }
   static #onFight(_event, target) { this.fightId = target.dataset.fight; this.heroKey = null; this.tab = "party"; this.render(); }
   static #onJournal() { game.modules.get(this.moduleId).api.openChronicle(); }
+
+  /** GM only: set (or clear, with "Automatic") the shown fight's result, then rewrite its Roll of Valour page. */
+  static async #onSetResult() {
+    if (!game.user.isGM || !this.fightId || this.fightId === TO_DATE) return;
+    const result = this.element.querySelector(".pfm-result-pick")?.value || null;
+    const note = this.element.querySelector(".pfm-result-note")?.value?.trim() ?? "";
+    const api = game.modules.get(this.moduleId).api;
+    await api.setFightOutcome(this.fightId, result, note);
+    await api.writeFightJournal(this.fightId);
+    ui.notifications.info(L("ResultSaved"));
+    this.render();
+  }
+
+  /** The GM's result picker for a combat: Automatic, or a ruling with an optional note. */
+  #resultControl(fight) {
+    const current = fight.outcome?.result ?? "";
+    const opts = ["", "victory", "defeat", "withdrawn", "undecided"]
+      .map((r) => `<option value="${r}" ${r === current ? "selected" : ""}>${esc(r ? L(`Result.${r}`) : L("ResultAuto"))}</option>`).join("");
+    return `<div class="pfm-result-control"><label>${esc(L("SetResult"))}</label><select class="pfm-result-pick">${opts}</select>
+      <input type="text" class="pfm-result-note" placeholder="${esc(L("ResultNote"))}" value="${esc(fight.outcome?.note ?? "")}">
+      <button type="button" data-action="setResult"><i class="fa-solid fa-gavel"></i> ${esc(L("SaveResult"))}</button></div>`;
+  }
   static #onHero(_event, target) { this.heroKey = target.dataset.key; this.tab = "player"; this.render(); }
 
   /** The hero a player sees by default: their assigned character, else the first hero they own. */
@@ -102,7 +125,8 @@ export class StatsDashboard extends ApplicationV2 {
     const options = [{ id: TO_DATE, name: L("ToDate") }, ...fights];
     const picker = `<select class="pfm-fight">${options.map((f) => `<option value="${esc(f.id)}" ${f.id === fight.id ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select>`;
     const body = { party: () => this.#party(stats), player: () => this.#player(stats), adversaries: () => this.#adversaries(stats), plays: () => this.#plays(stats), roll: () => (toDate ? this.#fightList(stats) : stats.session ? this.#checks(stats) + this.#plays(stats) : this.#roll(stats, fight)) }[this.tab]();
-    return `<header class="pfm-head">${picker}<nav class="pfm-tabs">${tabs}</nav></header><section class="pfm-body">${body}</section>`;
+    const control = game.user.isGM && !toDate && !stats.session ? this.#resultControl(fight) : "";
+    return `<header class="pfm-head">${picker}<nav class="pfm-tabs">${tabs}</nav></header>${control}<section class="pfm-body">${body}</section>`;
   }
 
   _replaceHTML(result, content) { content.innerHTML = result; }

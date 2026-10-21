@@ -303,8 +303,11 @@ export function sideOf(key, m) {
   return m.ally ? "ally" : "adversary";
 }
 
-/** A combatant out of the fight: dead, insane, or (for minions and ordinary adversaries) defeated. */
-const isOut = (m) => !!m?.dead || (m?.statuses ?? []).some((x) => x === "dead" || x === "insane");
+/**
+ * A combatant out of the fight: dead, insane, (for minions and ordinary adversaries) defeated, or fled.
+ * A GM marks a fleeing adversary from the combat tracker (scripts/stats/fled.mjs). It left the fight, so it counts as beaten.
+ */
+export const isOut = (m) => !!m?.dead || (!!m?.fled && m?.type !== "hero" && !m?.ally) || (m?.statuses ?? []).some((x) => x === "dead" || x === "insane");
 
 /**
  * The result of a fight from who is left standing. A GM override wins.
@@ -321,7 +324,10 @@ export function fightOutcome(meta, override = null) {
   const foes = pool.filter((m) => sideOf(m.key ?? "", m) === "adversary"); // companions never decide a result
   const targets = foes.some(isMajor) ? foes.filter(isMajor) : foes;
   if (heroes.length && heroes.every(isOut)) return { result: "defeat", reason: "every hero is dead or insane", by: "auto" };
-  if (targets.length && targets.every(isOut)) return { result: "victory", reason: foes.some(isMajor) ? "every major adversary is down" : "every adversary is down", by: "auto" };
+  if (targets.length && targets.every(isOut)) {
+    const who = foes.some(isMajor) ? "every major adversary" : "every adversary";
+    return { result: "victory", reason: `${who} is ${targets.some((m) => m.fled) ? "down or fled" : "down"}`, by: "auto" };
+  }
   return { result: "undecided", reason: "both sides still had fighters standing when combat ended", by: "auto" };
 }
 
@@ -432,7 +438,7 @@ export function aggregate(records, meta = {}, { outcome = null } = {}) {
   // Derived values.
   for (const s of Object.values(stats)) {
     const m = meta[s.key] ?? {};
-    Object.assign(s, { name: m.name ?? hazards[s.key] ?? s.key, side: side(s.key), important: !!m.important, major: isMajor(m), rank: m.rank ?? null, finalState: m.state ?? null, finalStatuses: m.statuses ?? [], out: isOut(m) });
+    Object.assign(s, { name: m.name ?? hazards[s.key] ?? s.key, side: side(s.key), important: !!m.important, major: isMajor(m), rank: m.rank ?? null, finalState: m.state ?? null, finalStatuses: m.statuses ?? [], fled: !!m.fled, out: isOut(m) });
     s.hitRate = s.attacks ? (s.hits + s.glances) / s.attacks : null;
     s.cleanHitRate = s.attacks ? s.hits / s.attacks : null;
     s.critRate = s.attacks ? s.crits / s.attacks : null;

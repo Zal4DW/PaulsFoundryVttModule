@@ -12,6 +12,7 @@ import { registerMedicalKit } from "./medical-kit.mjs";
 import { getAddiction, registerDose, setAddiction } from "./dose.mjs";
 import { registerMoveConfirm, syncMoveConfirmFlag } from "./move-confirm.mjs";
 import { registerItemPiles } from "./item-piles.mjs";
+import { registerFled } from "./stats/fled.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -106,6 +107,8 @@ Hooks.once("init", () => {
 
   // Fight stats. Every user can read them; the GM client records them. A change re-draws open dashboards.
   registerStatsSettings(MODULE_ID, () => { if (statsApp?.rendered) statsApp.render(); });
+  // GM-only "Mark as fled" in the combat tracker's row menu: a fled adversary counts as out of the fight.
+  registerFled(MODULE_ID);
 
   // Crucible only: a grip toggle for Versatile weapons on actor sheets, Reveal's tosslight as real token light,
   // the Wound Medical Kit and the Dose of It'll Be Alright... with its addiction.
