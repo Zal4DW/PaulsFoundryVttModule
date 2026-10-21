@@ -10,6 +10,7 @@ const foundryGlobals = {
   CONFIG: "readonly",
   CONST: "readonly",
   canvas: "readonly",
+  PIXI: "readonly",
   ChatMessage: "readonly",
   fromUuid: "readonly",
   fromUuidSync: "readonly",
