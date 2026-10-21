@@ -72,6 +72,15 @@ Item Piles 3.3.4 shows its GM-only "Config Update" button in the loot window to 
 
 Item Piles keeps a GM's own edits to these settings, and applies this setup again only when a module update raises its version. Turn off "Set up Item Piles for Crucible" to configure Item Piles by hand.
 
+## Crucible: loot into the Party Stash
+
+With [Item Piles](https://github.com/fantasycalendar/FoundryVTT-ItemPiles) and [Crucible Party Stash](https://github.com/Ebonhawk3829/crucible-party-stash) both active:
+
+- Each row in a loot pile's window gets a box button beside Take. It sends that item, or the coin, straight to the party stash. The quantity box sets how many, and an empty box sends them all. Coin arrives as copper, because Crucible stores all coin as copper.
+- Dragging a pile item onto the stash tab now moves it. Before, the stash added the item but couldn't delete it from a pile the player doesn't own, which left a duplicate. Now the removal goes through Item Piles, which does it on the GM's client.
+
+The party is the one set in Crucible's "Primary Adventuring Party" setting. A GM must be logged in, because Item Piles makes its changes through the GM.
+
 ## Crucible: hidden tokens don't block players
 
 Crucible stops movement at other tokens' edges. It skips Secret-disposition tokens for players, but not hidden ones, so a player walks into an invisible wall wherever the GM has hidden an ambush. On player clients, the module makes hidden tokens exempt from that collision too. The GM's moves still collide with them.

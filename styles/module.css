@@ -93,3 +93,9 @@
    editQuantities store object, which is always truthy, instead of its value. A player's click fails with a permission
    error. The module puts pfm-player on <body> for non-GM users (scripts/item-piles.mjs), so only players lose it. */
 body.pfm-player .item-pile-inventory button:has(> i.fa-save) { display: none; }
+
+/* "Send to the party stash" button beside Item Piles' Take button (scripts/stash-bridge.mjs). */
+.item-piles-item-row .pfm-to-stash {
+  flex: 0 0 2rem;
+  margin-left: 0.25rem;
+}
