@@ -1,6 +1,6 @@
 // Merchants: the module's own shop window, to replace Crucible Shop. See docs/merchant-plan.md.
 import { MERCHANT_FLAG, normaliseMerchant } from "../lib/merchant.mjs";
-import { merchantData, registerMerchantSocket, requestTrade } from "./trade.mjs";
+import { decideApproval, isWaitingApproval, merchantData, registerMerchantSocket, requestTrade } from "./trade.mjs";
 import { MerchantWindow } from "./window.mjs";
 
 const L = (key, data) => (data ? game.i18n.format(`PFM.Merchant.${key}`, data) : game.i18n.localize(`PFM.Merchant.${key}`));
@@ -53,16 +53,59 @@ export async function inviteToMerchant(moduleId, actorOrId, userIds = []) {
 
 export function registerMerchant(moduleId) {
   Hooks.once("ready", () => registerMerchantSocket(moduleId));
-  // The invite card's button. The card's HTML is rebuilt on each render, so bind it every time.
-  Hooks.on("renderChatMessageHTML", (_message, html) => {
+  // The cards' buttons. A card's HTML is rebuilt on each render, so bind them every time.
+  Hooks.on("renderChatMessageHTML", (message, html) => {
     for (const button of html.querySelectorAll(".pfm-merchant-open")) {
       button.addEventListener("click", () => openMerchant(moduleId, button.dataset.merchant));
     }
+    decorateApproval(moduleId, message, html);
+    decorateReceipt(moduleId, message, html);
   });
   return {
     openMerchant: (actor, options) => openMerchant(moduleId, actor, options),
     setMerchant: (actor, data) => setMerchant(moduleId, actor, data),
     inviteToMerchant: (actor, userIds) => inviteToMerchant(moduleId, actor, userIds),
-    merchantTrade: (request) => requestTrade(moduleId, request)
+    merchantTrade: (request, options) => requestTrade(moduleId, request, options)
   };
+}
+
+/** Approval card: live buttons for a GM while the trade waits, else the decision. */
+function decorateApproval(moduleId, message, html) {
+  const flag = message.getFlag(moduleId, "merchantApproval");
+  const box = html.querySelector(".pfm-merchant-approval-buttons");
+  if (!flag || !box) return;
+  // Only the active GM holds the waiting trade. After a reload it is gone, so the card can't decide anything.
+  const stale = !flag.decided && game.users.activeGM?.isSelf && !isWaitingApproval(flag.approvalId);
+  const status = flag.decided ? L(flag.decided === "approved" ? "Approved" : "Declined") : stale ? L("Expired") : null;
+  if (status) {
+    box.replaceWith(Object.assign(document.createElement("p"), { className: "pfm-merchant-status", textContent: status }));
+    return;
+  }
+  for (const button of box.querySelectorAll("button[data-approval]")) {
+    button.addEventListener("click", () => {
+      for (const b of box.querySelectorAll("button")) b.disabled = true;
+      decideApproval(moduleId, button.dataset.approval, button.dataset.approved === "1");
+    });
+  }
+}
+
+/** Receipt card: "Undone" once reversed, else an Undo button for the GM. */
+function decorateReceipt(moduleId, message, html) {
+  const flag = message.getFlag(moduleId, "merchantReceipt");
+  const card = html.querySelector(".pfm-merchant-receipt");
+  if (!flag || !card) return;
+  if (flag.undone) {
+    card.classList.add("pfm-merchant-undone");
+    card.append(Object.assign(document.createElement("p"), { className: "pfm-merchant-status", textContent: L("Undone") }));
+    return;
+  }
+  if (!game.user.isGM) return;
+  const button = Object.assign(document.createElement("button"), { type: "button", className: "pfm-merchant-undo" });
+  button.innerHTML = `<i class="fa-solid fa-rotate-left"></i> ${foundry.utils.escapeHTML(L("Undo"))}`;
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    const result = await requestTrade(moduleId, { action: "undo", merchantId: flag.merchantId, tradeId: flag.tradeId });
+    if (!result.ok) { ui.notifications.warn(L(`Reason.${result.reason}`)); button.disabled = false; }
+  });
+  card.append(button);
 }

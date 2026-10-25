@@ -112,3 +112,9 @@ body.pfm-player .item-pile-inventory button:has(> i.fa-save) { display: none; }
 .pfm-merchant .pfm-merchant-row.dear .pfm-merchant-price { opacity: 0.55; }
 .pfm-merchant .pfm-merchant-row.soldout { opacity: 0.5; }
 .pfm-merchant-invite button { width: 100%; }
+.pfm-merchant .pfm-merchant-drop { text-align: center; padding: 0.5rem; border: 1px dashed rgba(255, 255, 255, 0.25); border-radius: 4px; opacity: 0.8; }
+.pfm-merchant-approval-buttons { display: flex; gap: 0.4rem; }
+.pfm-merchant-undone { text-decoration: line-through; opacity: 0.6; }
+.pfm-merchant-undone .pfm-merchant-status { text-decoration: none; }
+.pfm-merchant-status { font-style: italic; margin: 0.25rem 0 0; }
+.pfm-merchant-receipt .pfm-merchant-undo { margin-top: 0.3rem; width: 100%; }

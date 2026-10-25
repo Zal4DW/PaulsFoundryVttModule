@@ -48,6 +48,41 @@ export function checkBuy({ quantity, stock, unitPrice, purse }) {
   return { ok: true, reason: null, total };
 }
 
+/**
+ * Can a hero sell this item to the merchant? The merchant has coin without limit.
+ * @param {{quantity: number, have: number, unitPrice: number, equipped?: boolean, sellable?: boolean}} trade
+ *   have: how many the hero holds. sellable: false for things with no price, such as talents and spells.
+ * @returns {{ok: boolean, reason: string|null, total: number}}  reason: "quantity", "cantSell", "equipped" or "notEnoughItems".
+ */
+export function checkSell({ quantity, have, unitPrice, equipped = false, sellable = true }) {
+  if (!Number.isInteger(quantity) || quantity < 1) return { ok: false, reason: "quantity", total: 0 };
+  if (!sellable) return { ok: false, reason: "cantSell", total: 0 };
+  if (equipped) return { ok: false, reason: "equipped", total: 0 };
+  if (quantity > have) return { ok: false, reason: "notEnoughItems", total: 0 };
+  return { ok: true, reason: null, total: unitPrice * quantity };
+}
+
+/** The catalogue with an undone purchase put back on its line. An unlimited or removed line is unchanged. */
+export function restoreCatalogue(catalogue, lineId, quantity) {
+  return catalogue.map((l) => (l.id === lineId && l.count !== null ? { ...l, count: l.count + quantity } : l));
+}
+
+/**
+ * The trade to undo, or why it can't be undone.
+ * @returns {{entry: object|null, reason: string|null}}  reason: "noTrade" or "alreadyUndone".
+ */
+export function findUndoable(log, tradeId) {
+  const entry = (log ?? []).find((e) => e.id === tradeId) ?? null;
+  if (!entry) return { entry: null, reason: "noTrade" };
+  if (entry.undone) return { entry: null, reason: "alreadyUndone" };
+  return { entry, reason: null };
+}
+
+/** The log with one trade marked as undone. */
+export function markUndone(log, tradeId) {
+  return (log ?? []).map((e) => (e.id === tradeId ? { ...e, undone: true } : e));
+}
+
 /** The catalogue after selling quantity from one line. An unlimited line is unchanged. A sold-out line stays listed. */
 export function takeFromCatalogue(catalogue, lineId, quantity) {
   return catalogue.map((l) => (l.id === lineId && l.count !== null ? { ...l, count: Math.max(0, l.count - quantity) } : l));

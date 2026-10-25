@@ -2,7 +2,7 @@
 
 A merchant window in Paul's Foundry Module to replace Crucible Shop. Item Piles stays: it runs the loot and corpse piles, the crate and lock box, and the Party Stash bridge.
 
-Status: phase 1 (Buy) is built. Phases 2 to 4 are not started.
+Status: phases 1 (Buy) and 2 (sell, approval and undo) are built. Phases 3 and 4 are not started.
 
 Until phase 3 adds a setup window, the GM sets merchants up from a macro:
 
@@ -87,7 +87,7 @@ If no GM is logged in, the window says that trades need a GM.
 These use no Foundry globals, so Vitest can test them in Node:
 - `priceFor(listPrice, rate, override)`: rounds to whole copper.
 - Phase 1 (built): `normaliseMerchant(data)`, `priceFor(listPrice, rate, override)`, `checkBuy(state)`, `takeFromCatalogue(catalogue, lineId, qty)`, `logTrade(log, entry)` and `fromCrucibleShop(shop, makeId)`.
-- Phase 2: `checkSell(state)`, plus helpers to put stock back and mark a trade undone.
+- Phase 2 (built): `checkSell(state)`, `restoreCatalogue(catalogue, lineId, qty)`, `findUndoable(log, tradeId)` and `markUndone(log, tradeId)`.
 - Phase 3: `fromItemPilesMerchant(flags, items)`, to import Muskrat.
 
 ### Windows
