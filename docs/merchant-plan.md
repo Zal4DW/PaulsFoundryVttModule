@@ -2,9 +2,9 @@
 
 A merchant window in Paul's Foundry Module to replace Crucible Shop. Item Piles stays: it runs the loot and corpse piles, the crate and lock box, and the Party Stash bridge.
 
-Status: phases 1 (Buy) and 2 (sell, approval and undo) are built. Phases 3 and 4 are not started.
+Status: phases 1 to 3 are built: buy; sell, approval and undo; setup window, token opening and imports. Phase 4 (retiring Crucible Shop on the live install) is Paul's step after a session with no shop problems.
 
-Until phase 3 adds a setup window, the GM sets merchants up from a macro:
+The GM sets a merchant up from the Actors sidebar: right-click an actor, then Merchant setup. To move the current shops over, open Game Settings, then Configure Settings, then Paul's Foundry Module, then Import merchants. The same is possible from a macro:
 
 ```js
 const api = game.modules.get("pauls-foundry-module").api;
@@ -88,7 +88,7 @@ These use no Foundry globals, so Vitest can test them in Node:
 - `priceFor(listPrice, rate, override)`: rounds to whole copper.
 - Phase 1 (built): `normaliseMerchant(data)`, `priceFor(listPrice, rate, override)`, `checkBuy(state)`, `takeFromCatalogue(catalogue, lineId, qty)`, `logTrade(log, entry)` and `fromCrucibleShop(shop, makeId)`.
 - Phase 2 (built): `checkSell(state)`, `restoreCatalogue(catalogue, lineId, qty)`, `findUndoable(log, tradeId)` and `markUndone(log, tradeId)`.
-- Phase 3: `fromItemPilesMerchant(flags, items)`, to import Muskrat.
+- Phase 3 (built): `isItemPilesMerchant(data)`, `fromItemPilesMerchant(data)` and `importableShops(shops)`.
 
 ### Windows
 

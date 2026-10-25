@@ -108,10 +108,18 @@ test("a player opens the shop from an invite and buys with the Buy button", asyn
     await join(playerPage, PLAYER);
     // Invite after the player joins, so the card arrives in their chat log.
     await page.evaluate(async ({ id, ids: x }) => game.modules.get(id).api.inviteToMerchant(x.merchant, [x.player]), { id: MODULE_ID, ids });
-    await playerPage.locator(".pfm-merchant-open").last().click();
+    // Crucible opens its welcome journal on login, sometimes a moment late, and it can cover the chat log. Close
+    // framed windows and show the chat, then send the clicks to the buttons themselves so a late window can't eat them.
+    await playerPage.evaluate(async () => {
+      const open = [...foundry.applications.instances.values()].filter((app) => app.hasFrame && app.rendered);
+      await Promise.all(open.map((app) => app.close()));
+      ui.sidebar.changeTab("chat", "primary");
+      ui.sidebar.expand();
+    });
+    await playerPage.locator(".pfm-merchant-open").last().dispatchEvent("click");
     const shop = playerPage.locator(`#pfm-merchant-${ids.merchant}`);
     await expect(shop.locator(".pfm-merchant-row")).toHaveCount(1);
-    await shop.locator('button[data-action="buy"]').click();
+    await shop.locator('button[data-action="buy"]').dispatchEvent("click");
     await expect(shop.locator(".pfm-merchant-soldout")).toBeVisible({ timeout: 15_000 });
 
     const state = await page.evaluate((x) => ({
