@@ -1,6 +1,6 @@
 // GM-side recorder: turns chat cards into stats records as they happen, and stores them for every user to read.
 // Runs only on the active GM's client, so records are written once.
-import { aggregate, estimateMoves, extractRecords, isAlly, isHazardKey } from "../lib/stats.mjs";
+import { aggregate, estimateMoves, extractRecords, isAlly, isHazardKey, mergeMeta } from "../lib/stats.mjs";
 import { fightReport } from "../lib/stats-view.mjs";
 import { flushLog, readLog, updateLog } from "./store.mjs";
 
@@ -76,14 +76,11 @@ function keyForActor(actor, combat = game.combat) {
 
 /** Make sure every combatant of the running combat has metadata, and refresh dead / defeated flags. */
 function refreshMeta(fight, combat = game.combat) {
-  for (const c of combat?.combatants ?? []) fight.meta[c.tokenId] = metaFor(c.tokenId, combat);
+  // A deleted token resolves to nothing, so mergeMeta keeps what was recorded, or its name and kill are lost.
+  for (const c of combat?.combatants ?? []) fight.meta[c.tokenId] = mergeMeta(fight.meta[c.tokenId], metaFor(c.tokenId, combat));
   for (const key of Object.keys(fight.meta)) {
     if (combat?.combatants.some((c) => c.tokenId === key)) continue;
-    const fresh = metaFor(key, combat);
-    // A deleted token (often a defeated minion) resolves to nothing. Keep what was recorded, or its kill is lost.
-    if (!fresh.actorId) continue;
-    // Dead and fled stay set: a GM often deletes a fled adversary's token, which also removes its combatant flag.
-    fight.meta[key] = { ...fight.meta[key], ...fresh, combatantId: fight.meta[key].combatantId, dead: fight.meta[key].dead || fresh.dead, fled: !!(fight.meta[key].fled || fresh.fled) };
+    fight.meta[key] = mergeMeta(fight.meta[key], metaFor(key, combat), { inCombat: false });
   }
 }
 
