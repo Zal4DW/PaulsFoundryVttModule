@@ -1,6 +1,6 @@
 import { greetingContent, HELLO_PATTERN, isHelloCommand } from "./lib/hello.mjs";
 import { OPEN_PARTY_KEY, partyOpenDecision } from "./lib/party.mjs";
-import { chooseCharacter, OPEN_CHARACTER_KEY } from "./lib/character.mjs";
+import { chooseCharacter, expandGroups, OPEN_CHARACTER_KEY } from "./lib/character.mjs";
 import { fightFromExport } from "./lib/stats.mjs";
 import { StatsDashboard } from "./stats/dashboard.mjs";
 import { addFightNote, chronicleJournal, rebuildFight, setFightOutcome, startRecorder, writeFightJournal } from "./stats/recorder.mjs";
@@ -314,13 +314,19 @@ async function chooseAndOpenCharacter() {
   const combat = game.combat;
   const tokens = canvas?.tokens?.controlled ?? [];
   const party = globalThis.crucible?.party ?? null;
+  // A group actor (the party token on a travel map, or a party assigned as a user's character) stands for its
+  // members: Crucible keeps them in system.actors. keep() then drops the members this user doesn't own.
+  const isGroup = (a) => a?.type === "group" || (!!party && a === party);
+  const expand = (list) => expandGroups(list, (a) => (isGroup(a) ? [...(a.system?.actors ?? [])] : null));
+  const assignedGroup = isGroup(game.user.character) ? game.user.character : null;
   const decision = chooseCharacter({
     activeTurn: combat?.started ? keep(combat.combatant?.actor) : null,
-    selected: ids(tokens.map((t) => t.actor)),
-    targeted: ids([...game.user.targets].map((t) => t.actor)),
-    assigned: keep(game.user.character),
-    // For the GM, hasPlayerOwner limits this to player characters. Group actors such as the party are left out.
-    owned: ids(game.actors.filter((a) => a.hasPlayerOwner && a.type !== "group" && a !== party))
+    selected: ids(expand(tokens.map((t) => t.actor))),
+    targeted: ids(expand([...game.user.targets].map((t) => t.actor))),
+    assigned: assignedGroup ? null : keep(game.user.character),
+    // An assigned group's members, then the party's: the user's heroes and companions (for the GM, every member).
+    // Without a party, hasPlayerOwner limits this to player characters.
+    owned: ids(expand([assignedGroup, ...(party ? [party] : game.actors.filter((a) => a.hasPlayerOwner && !isGroup(a)))]))
   });
 
   if (decision.mode === "none") {

@@ -3,6 +3,24 @@
 /** The default key for the Open Character keybinding, as a KeyboardEvent.code. */
 export const OPEN_CHARACTER_KEY = "KeyC";
 
+/**
+ * Replace each group actor (Crucible's party) with its members, keeping order and dropping repeats.
+ * Out of combat on a travel map, a player's selected token is usually the party token, and C should open the
+ * player's own character, not the party sheet.
+ * @template T
+ * @param {T[]} actors
+ * @param {(actor: T) => T[]|null} membersOf  A group's members, or null when the actor isn't a group.
+ * @returns {T[]}
+ */
+export function expandGroups(actors, membersOf) {
+  const out = [];
+  for (const actor of actors) {
+    if (!actor) continue;
+    for (const a of membersOf(actor) ?? [actor]) if (!out.includes(a)) out.push(a);
+  }
+  return out;
+}
+
 /** Hint order in the picker list. Lower comes first. */
 const HINT_ORDER = { selected: 0, targeted: 1, assigned: 2 };
 

@@ -179,6 +179,35 @@ export function registerQuenchBatches(quench, moduleId) {
           assert.equal(result.uuid, temp.uuid);
           assert.isTrue(temp.sheet.rendered);
         });
+
+        // Out of combat on a travel map, a player's selected token is the party token. C used to open the party sheet.
+        it("never offers a party group, and opens its member instead", async function () {
+          if (game.system.id !== "crucible") this.skip();
+          await temp.sheet.close();
+          const group = await Actor.create({ name: "PFM Quench Party", type: "group", system: { members: [{ actorId: temp.id }] } });
+          const offered = [];
+          const closePicker = Hooks.on("renderDialogV2", (dialog) => {
+            offered.push(...Object.keys(dialog.options.buttons ?? {}), ...(dialog.options.buttons ?? []).map?.((b) => b.action) ?? []);
+            dialog.close();
+          });
+          let result;
+          try {
+            await game.user.update({ character: group.id });
+            canvas?.tokens?.releaseAll();
+            canvas?.tokens?.setTargets([]);
+            result = await game.modules.get(moduleId).api.openCharacter();
+          } finally {
+            Hooks.off("renderDialogV2", closePicker);
+            await game.user.update({ character: originalCharacter });
+            await group.sheet?.close();
+            await group.delete();
+          }
+          assert.include(["open", "pick"], result.mode, "C found no one to open");
+          assert.notEqual(result.uuid, group.uuid, "C opened the party");
+          assert.notInclude(offered, group.uuid, "the picker offered the party");
+          if (result.mode === "open") assert.equal(result.uuid, temp.uuid);
+          else assert.include(offered, temp.uuid, "the picker left out the party's member");
+        });
       });
     },
     { displayName: "Paul's Foundry Module: character" }

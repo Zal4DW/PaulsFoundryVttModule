@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chooseCharacter, OPEN_CHARACTER_KEY } from "../../scripts/lib/character.mjs";
+import { chooseCharacter, expandGroups, OPEN_CHARACTER_KEY } from "../../scripts/lib/character.mjs";
 
 describe("chooseCharacter", () => {
   it("opens the active-turn actor first, whatever else is selected", () => {
@@ -65,5 +65,24 @@ describe("chooseCharacter", () => {
 describe("OPEN_CHARACTER_KEY", () => {
   it("is the KeyboardEvent.code for C", () => {
     expect(OPEN_CHARACTER_KEY).toBe("KeyC");
+  });
+});
+
+describe("expandGroups", () => {
+  const party = { name: "party", members: ["ignis", "brak", "gunk"] };
+  const membersOf = (a) => a.members ?? null;
+
+  it("replaces the party with its members", () => {
+    const out = expandGroups([party], membersOf);
+    expect(out).toEqual(["ignis", "brak", "gunk"]);
+  });
+
+  it("keeps other actors, in order, without repeats", () => {
+    const ignis = "ignis";
+    expect(expandGroups([ignis, party, null], (a) => (a === party ? party.members : null))).toEqual(["ignis", "brak", "gunk"]);
+  });
+
+  it("leaves a list with no group alone", () => {
+    expect(expandGroups(["a", "b"], () => null)).toEqual(["a", "b"]);
   });
 });
