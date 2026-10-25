@@ -28,10 +28,11 @@ export function registerMerchantSocket(moduleId) {
       if (!game.users.get(senderId)) return;
       enqueue(moduleId, msg.request, senderId).then((result) => game.socket.emit(channel, { type: "merchantResult", requestId: msg.requestId, result }, { recipients: [senderId] }));
     }
-    // Only the active GM's answer counts.
-    if (msg?.type === "merchantResult" && senderId === game.users.activeGM?.id) {
-      pending.get(msg.requestId)?.(msg.result);
+    // Only the GM the request went to may answer it. The active GM can change while a trade runs.
+    const p = pending.get(msg?.requestId);
+    if (msg?.type === "merchantResult" && p && senderId === p.gmId) {
       pending.delete(msg.requestId);
+      p.resolve(msg.result);
     }
   });
 }
@@ -47,7 +48,7 @@ export function requestTrade(moduleId, request) {
   if (gm.isSelf) return enqueue(moduleId, request, game.user.id);
   const requestId = foundry.utils.randomID();
   return new Promise((resolve) => {
-    pending.set(requestId, resolve);
+    pending.set(requestId, { resolve, gmId: gm.id });
     game.socket.emit(`module.${moduleId}`, { type: "merchantTrade", requestId, request }, { recipients: [gm.id] });
     setTimeout(() => { if (pending.delete(requestId)) resolve({ ok: false, reason: "timeout" }); }, TIMEOUT_MS);
   });
@@ -95,28 +96,40 @@ async function buy(moduleId, { merchantId, actorId, source, id, quantity }, user
   const check = checkBuy({ quantity, stock: found.stock, unitPrice, purse: hero.system.currency });
   if (!check.ok) return check;
 
+  // Take the stock, then the coin, then deliver. If any step fails, undo the steps before it, so the hero never
+  // pays for nothing and the merchant never loses stock it didn't sell.
+  const heldSnapshot = source === "held" ? item.toObject() : null;
+  const flagPath = `flags.${moduleId}.${MERCHANT_FLAG}`;
   const purse = hero.system.currency;
-  await hero.update({ "system.currency": purse - check.total });
+  const steps = [];
   try {
+    if (source === "held") {
+      const left = (item.system.quantity ?? 1) - quantity;
+      if (left > 0) await item.update({ "system.quantity": left });
+      else await item.delete();
+      steps.push(() => (merchant.items.has(heldSnapshot._id) ? merchant.items.get(heldSnapshot._id).update({ "system.quantity": heldSnapshot.system.quantity }) : merchant.createEmbeddedDocuments("Item", [heldSnapshot], { keepId: true })));
+    } else {
+      await merchant.update({ [`${flagPath}.catalogue`]: takeFromCatalogue(data.catalogue, id, quantity) });
+      steps.push(() => merchant.update({ [`${flagPath}.catalogue`]: data.catalogue }));
+    }
+    await hero.update({ "system.currency": purse - check.total });
+    steps.push(() => hero.update({ "system.currency": purse }));
     await giveItem(hero, item, quantity, line?.uuid ?? null);
   } catch (err) {
-    // The hero paid but got nothing: give the coin back before the queue logs the error.
-    await hero.update({ "system.currency": purse });
+    for (const undo of steps.reverse()) await undo().catch((e) => console.error(`${moduleId} | merchant rollback failed`, e));
     throw err;
   }
-  if (source === "held") {
-    const left = (item.system.quantity ?? 1) - quantity;
-    if (left > 0) await item.update({ "system.quantity": left });
-    else await item.delete();
-  }
   const entry = { id: foundry.utils.randomID(), ts: Date.now(), action: "buy", userId, actorId, source, lineId: id, uuid: line?.uuid ?? null, name: item.name, quantity, total: check.total };
-  const catalogue = source === "catalogue" ? takeFromCatalogue(data.catalogue, id, quantity) : data.catalogue;
-  await merchant.update({ [`flags.${moduleId}.${MERCHANT_FLAG}`]: { ...data, catalogue, log: logTrade(data.log, entry) } });
+  await merchant.update({ [`${flagPath}.log`]: logTrade(data.log, entry) });
   await postReceipt(moduleId, merchant, hero, entry);
   return { ok: true, total: check.total };
 }
 
-/** Put quantity of an item on the hero: onto a matching stack when it stacks, else as new items. */
+/**
+ * Put quantity of an item on the hero: onto a matching stack when it stacks, else as new items.
+ * Throws if the items don't all arrive: a preCreate hook can veto a creation without an error, and then
+ * createEmbeddedDocuments returns fewer documents than asked for. Any that did arrive are removed first.
+ */
 async function giveItem(hero, item, quantity, uuid) {
   const data = item.toObject();
   delete data._id;
@@ -124,12 +137,23 @@ async function giveItem(hero, item, quantity, uuid) {
   if (uuid?.startsWith("Compendium.")) foundry.utils.setProperty(data, "_stats.compendiumSource", uuid);
   if (isStackable(item)) {
     const stack = hero.items.find((i) => i.type === item.type && i.name === item.name && isStackable(i));
-    if (stack) return stack.update({ "system.quantity": (stack.system.quantity ?? 1) + quantity });
+    if (stack) {
+      const before = stack.system.quantity ?? 1;
+      const updated = await stack.update({ "system.quantity": before + quantity });
+      if (!updated || (stack.system.quantity ?? 1) !== before + quantity) throw new Error(`${item.name} did not reach ${hero.name}`);
+      return;
+    }
     data.system.quantity = quantity;
-    return hero.createEmbeddedDocuments("Item", [data]);
+    const created = await hero.createEmbeddedDocuments("Item", [data]);
+    if (created.length !== 1) throw new Error(`${item.name} did not reach ${hero.name}`);
+    return;
   }
   data.system.quantity = 1;
-  return hero.createEmbeddedDocuments("Item", Array.from({ length: quantity }, () => foundry.utils.deepClone(data)));
+  const created = await hero.createEmbeddedDocuments("Item", Array.from({ length: quantity }, () => foundry.utils.deepClone(data)));
+  if (created.length !== quantity) {
+    if (created.length) await hero.deleteEmbeddedDocuments("Item", created.map((c) => c.id));
+    throw new Error(`Only ${created.length} of ${quantity} ${item.name} reached ${hero.name}`);
+  }
 }
 
 /** A chat card that says who bought what, and for how much. */
