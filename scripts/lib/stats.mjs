@@ -295,6 +295,22 @@ export const isMajor = (m) => !!m?.important || ["boss", "elite"].includes(m?.ra
  */
 export const isAlly = ({ type, partyMember = false, friendly = false, companion = false }) => !!type && type !== "hero" && (partyMember || friendly || companion);
 
+/**
+ * Fold a fresh metadata read into the entry a fight already holds.
+ * A deleted token reads back with no actor and its id as its name: a defeated minion, or a summon Crucible removes
+ * when it dies while its combatant stays in the tracker (Feldspar's earth sprite). Keep the recorded entry then.
+ * Off the tracker, dead and fled stay set: a GM often deletes a fled adversary's token, which also removes its combatant flag.
+ * @param {object|undefined} prev  The stored entry, if any.
+ * @param {object} fresh  What metaFor reads now.
+ * @param {{inCombat?: boolean}} opts  inCombat: the key is a combatant of the running combat.
+ */
+export function mergeMeta(prev, fresh, { inCombat = true } = {}) {
+  if (!prev) return fresh;
+  if (!fresh.actorId) return { ...prev, combatantId: fresh.combatantId ?? prev.combatantId, dead: !!(prev.dead || fresh.dead), fled: !!(prev.fled || fresh.fled) };
+  if (inCombat) return fresh;
+  return { ...prev, ...fresh, combatantId: prev.combatantId, dead: !!(prev.dead || fresh.dead), fled: !!(prev.fled || fresh.fled) };
+}
+
 /** Which side a key is on: "hero", "ally" (a companion), "adversary", "hazard" or "unknown". */
 export function sideOf(key, m) {
   if (isHazardKey(key)) return "hazard";

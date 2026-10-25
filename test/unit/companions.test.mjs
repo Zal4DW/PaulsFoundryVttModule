@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregate, aggregateToDate, fightOutcome, isAlly, sideOf } from "../../scripts/lib/stats.mjs";
+import { aggregate, aggregateToDate, fightOutcome, isAlly, mergeMeta, sideOf } from "../../scripts/lib/stats.mjs";
 
 const hero = (key, extra = {}) => ({ key, name: key, type: "hero", combatantId: `c${key}`, ...extra });
 const foe = (key, extra = {}) => ({ key, name: key, type: "adversary", combatantId: `c${key}`, ...extra });
@@ -53,5 +53,36 @@ describe("companions and summons", () => {
     const s = aggregateToDate([fight("f1", 1), fight("f2", 2)]);
     expect(s.allies.map((r) => [r.key, r.name, r.fights, r.kills])).toEqual([["ally:tide", "Tide", 2, 2]]);
     expect(s.summary.heroKills).toBe(2);
+  });
+});
+
+describe("mergeMeta", () => {
+  const sprite = { key: "S", name: "Earth Sprite", type: "adversary", ally: true, actorId: "a1", combatantId: "cS", dead: false, fled: false };
+  const gone = { key: "S", name: "S", type: null, ally: false, actorId: null, combatantId: "cS", dead: false, fled: false };
+
+  it("keeps a summon's name when its token is deleted but its combatant stays", () => {
+    expect(mergeMeta(sprite, gone)).toEqual(sprite);
+  });
+
+  it("takes the live combatant id when a deleted token's combatant is still in the tracker", () => {
+    expect(mergeMeta({ ...sprite, combatantId: "old" }, gone).combatantId).toBe("cS");
+    expect(mergeMeta(sprite, { ...gone, combatantId: null }).combatantId).toBe("cS");
+  });
+
+  it("marks a deleted token dead when its combatant was defeated", () => {
+    expect(mergeMeta(sprite, { ...gone, dead: true }).dead).toBe(true);
+  });
+
+  it("takes a fresh read in combat, so a revived combatant is no longer dead", () => {
+    expect(mergeMeta({ ...sprite, dead: true }, { ...sprite, dead: false }).dead).toBe(false);
+  });
+
+  it("keeps dead, fled and the combatant id off the tracker", () => {
+    const m = mergeMeta({ ...sprite, dead: true, fled: true }, { ...sprite, combatantId: null }, { inCombat: false });
+    expect(m).toMatchObject({ dead: true, fled: true, combatantId: "cS" });
+  });
+
+  it("uses the fresh read when nothing was stored", () => {
+    expect(mergeMeta(undefined, gone)).toBe(gone);
   });
 });
