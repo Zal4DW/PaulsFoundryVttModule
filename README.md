@@ -16,7 +16,7 @@ Crucible's sheet always equips a Versatile weapon in its default grip, so a Bast
 
 ## Crucible: Reveal light
 
-Crucible lights a token for a Torch, a Lantern or a Luminous gem, but Reveal's "tosslight" lights nothing. With this module, when the GM confirms a Reveal card, the target's token gets the tosslight: bright light to 20 ft and dim to 40 ft. With no target it goes on the caster. Each caster has one tosslight, so casting Reveal again moves it. A token that already gives off light keeps its own. To put the light out, open the token HUD and click the lightbulb, and the token's earlier light comes back. Reveal has other uses, such as invisible writing. Turn off the "Reveal makes light" setting if your table would rather place light by hand.
+Crucible lights a token for a Torch, a Lantern or a Luminous gem, but Reveal's "tosslight" lights nothing. With this module, when the GM confirms a Reveal card, the target's token gets the tosslight: bright light to 20 ft and dim to 40 ft. To light yourself, target your own token or target nothing. Crucible's own Reveal refuses the caster as a target, so while the setting is on the module allows it. Each caster has one tosslight, so casting Reveal again moves it. A token that already gives off light keeps its own. To put the light out, open the token HUD and click the lightbulb, and the token's earlier light comes back. Reveal has other uses, such as invisible writing. Turn off the "Reveal makes light" setting if your table would rather place light by hand.
 
 ## Crucible: Wound Medical Kit
 

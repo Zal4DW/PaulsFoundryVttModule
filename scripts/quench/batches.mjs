@@ -232,6 +232,163 @@ export function registerQuenchBatches(quench, moduleId) {
   );
 
   quench.registerBatch(
+    `${moduleId}.tosslight`,
+    (context) => {
+      const { describe, it, assert, before, after, afterEach } = context;
+      const api = () => game.modules.get(moduleId).api;
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      let scene, priorScene, caster, ally, casterToken, allyToken, priorSetting;
+
+      const releaseTargets = () => { for (const t of [...game.user.targets]) t.setTarget(false); };
+      // Token#targetArrows is the "target arrows marker" (v14 docs). Foundry draws it every frame for a targeted token and
+      // throws if the token is still drawing, so wait for it before targeting.
+      const target = async (token) => {
+        await until(() => token.object?.targetArrows);
+        token.object.setTarget(true, { releaseOthers: true });
+      };
+      const revealCards = () => game.messages.contents.filter((m) => m.flags.crucible?.action?.id === "reveal"
+        && [caster?.id, ally?.id].includes(m.speaker?.actor));
+      /** Wait for a condition the module's async hooks settle, up to five seconds. */
+      const until = async (test) => {
+        for (let i = 0; i < 100 && !test(); i++) await sleep(50);
+        return Boolean(test());
+      };
+
+      /**
+       * Cast Reveal the way a player does: open Crucible's use dialog, click Use Action, then confirm the card as GM.
+       * The bug was in the dialog, which disabled Use Action when the caster targeted themselves or nothing.
+       */
+      async function castReveal() {
+        const warnings = [];
+        const warn = ui.notifications.warn;
+        ui.notifications.warn = (message, options) => { warnings.push(String(message?.message ?? message)); return warn.call(ui.notifications, message, options); };
+        try { return await castRevealOnce(warnings); } finally { ui.notifications.warn = warn; }
+      }
+
+      async function castRevealOnce(warnings) {
+        const using = caster.useAction("reveal");
+        let dialog;
+        await until(() => (dialog = [...foundry.applications.instances.values()]
+          .find((a) => a.rendered && a.action?.id === "reveal" && a.actor === caster)));
+        assert.exists(dialog, `Crucible's action use dialog did not open. ${warnings.join(" ")}`);
+        const submit = dialog.element.querySelector('button[type="submit"][data-action="roll"]');
+        if (submit.disabled) {
+          const reason = submit.dataset.tooltip ?? "";
+          await dialog.close();
+          await using;
+          assert.fail(`Use Action is disabled: ${reason}`);
+        }
+        submit.click();
+        const action = await using;
+        assert.exists(action, "Reveal was not used");
+        // The card holds the targets now. Release them: Foundry v14 animates target arrows on each targeted token every
+        // frame, and when the tosslight redraws a targeted token, Token#_drawTargetArrows throws on its missing graphic.
+        releaseTargets();
+        const card = revealCards().at(-1);
+        // Crucible auto-confirms a GM's self-only cast in the background. Confirming it here too would race that.
+        if (action.canAutoConfirm()) await until(() => card.flags.crucible.confirmed);
+        else await globalThis.crucible.api.models.CrucibleAction.fromChatMessage(card).confirm();
+        assert.isTrue(card.flags.crucible.confirmed, "the Reveal card was not confirmed");
+        return card;
+      }
+
+      describe("Reveal's tosslight", function () {
+        this.timeout(20_000);
+
+        before(async function () {
+          const rune = game.system.id === "crucible"
+            ? (await game.packs.get("crucible.talent")?.getDocuments())?.find((d) => d.system.actions?.some((a) => a.id === "reveal"))
+            : null;
+          if (!rune) this.skip();
+          priorSetting = game.settings.get(moduleId, "revealLight");
+          await game.settings.set(moduleId, "revealLight", true);
+          priorScene = game.scenes.viewed;
+          scene = await CONFIG.Scene.documentClass.create({ name: "PFM Quench Tosslight", width: 1500, height: 1000 });
+          await scene.view();
+          // Adversaries get their resources from their level, so they can act straight away. Heroes need a full build.
+          // createDocuments does not promise to return documents in input order, so look each one up by name.
+          const actors = await Actor.createDocuments([
+            { name: "PFM Quench Caster", type: "adversary", system: { details: { level: 3 } } },
+            { name: "PFM Quench Ally", type: "adversary", system: { details: { level: 3 } } }
+          ]);
+          caster = actors.find((a) => a.name === "PFM Quench Caster");
+          ally = actors.find((a) => a.name === "PFM Quench Ally");
+          await caster.createEmbeddedDocuments("Item", [rune.toObject()]);
+          const tokens = await Promise.all([caster, ally].map((a) => a.getTokenDocument({ actorLink: true })));
+          const placed = await scene.createEmbeddedDocuments("Token", [
+            { ...tokens[0].toObject(), x: 500, y: 500 },
+            { ...tokens[1].toObject(), x: 600, y: 500 }
+          ]);
+          casterToken = placed.find((t) => t.actorId === caster.id);
+          allyToken = placed.find((t) => t.actorId === ally.id);
+          await until(() => casterToken.object?.targetArrows && allyToken.object?.targetArrows);
+        });
+
+        afterEach(async () => {
+          releaseTargets();
+          // Each cast spends Action; refill it so the next test can cast again.
+          await caster?.update({ "system.resources.action.value": caster.system.resources.action.max });
+          for (const token of [casterToken, allyToken]) if (token) await api().dismissTosslight(token);
+        });
+
+        after(async () => {
+          releaseTargets();
+          const cards = revealCards().map((m) => m.id);
+          if (cards.length) await ChatMessage.deleteDocuments(cards);
+          if (priorScene) await priorScene.view();
+          await scene?.delete();
+          for (const actor of [caster, ally]) await actor?.delete();
+          if (priorSetting !== undefined) await game.settings.set(moduleId, "revealLight", priorSetting);
+        });
+
+        it("lets Reveal target its caster", () => {
+          assert.isTrue(caster.actions.reveal.target.self);
+        });
+
+        it("lights the caster's own token when the caster targets themselves", async () => {
+          await target(casterToken);
+          const card = await castReveal();
+          assert.equal(card.flags.crucible.targets?.[0]?.token, casterToken.uuid);
+          assert.isTrue(await until(() => casterToken.getFlag(moduleId, "tosslight")), "no tosslight on the caster");
+          assert.deepEqual([casterToken.light.bright, casterToken.light.dim], [20, 40]);
+        });
+
+        it("lights the caster's own token when nothing is targeted", async () => {
+          releaseTargets();
+          const card = await castReveal();
+          const { token, targets, confirmed } = card.flags.crucible;
+          assert.isTrue(await until(() => casterToken.getFlag(moduleId, "tosslight")),
+            `no tosslight on the caster. Card: ${JSON.stringify({ token, targets, confirmed })}, caster ${casterToken.uuid}`);
+          assert.deepEqual([casterToken.light.bright, casterToken.light.dim], [20, 40]);
+        });
+
+        it("still lights another token, and dismissing puts its light out", async () => {
+          await target(allyToken);
+          await castReveal();
+          assert.isTrue(await until(() => allyToken.getFlag(moduleId, "tosslight")), "no tosslight on the ally");
+          assert.equal(allyToken.light.bright, 20);
+          assert.notExists(casterToken.getFlag(moduleId, "tosslight"));
+          assert.isTrue(await api().dismissTosslight(allyToken));
+          assert.deepEqual([allyToken.light.bright, allyToken.light.dim], [0, 0]);
+          assert.notExists(allyToken.getFlag(moduleId, "tosslight"));
+        });
+
+        it("leaves Crucible's Reveal as it was while the setting is off", async () => {
+          await game.settings.set(moduleId, "revealLight", false);
+          try {
+            caster.reset();
+            assert.isFalse(caster.actions.reveal.target.self);
+          } finally {
+            await game.settings.set(moduleId, "revealLight", true);
+            caster.reset();
+          }
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: Reveal's tosslight" }
+  );
+
+  quench.registerBatch(
     `${moduleId}.fled`,
     (context) => {
       const { describe, it, assert } = context;

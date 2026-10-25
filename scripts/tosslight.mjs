@@ -2,7 +2,9 @@
 // with no target) gets the light, saved on the token so every client sees it. The token's earlier light is kept in
 // a flag and comes back when the tosslight goes. A token HUD button dismisses it, as the spell lets the caster do.
 // Reveal has other uses (invisible text, colour changes), so the "Reveal Light" setting turns this off.
-import { isRevealConfirm, planTosslight, TOSSLIGHT_LIGHT, tosslightTokenUuid } from "./lib/tosslight.mjs";
+// The caster can cast it on themselves: Crucible's own Reveal refuses that, so an action hook allows it.
+import { isRevealConfirm, planTosslight, REVEAL_ACTION, revealSelfTargetHooks, TOSSLIGHT_LIGHT, tosslightTokenUuid }
+  from "./lib/tosslight.mjs";
 
 const FLAG = "tosslight";
 
@@ -45,6 +47,14 @@ export function registerTosslight(moduleId) {
     type: Boolean,
     default: true
   });
+
+  // Crucible reads its action hook registry each time it builds an action, and the system's init hook (which makes
+  // crucible.api) runs before this module's init, so adding the entry here reaches every Reveal the actors prepare.
+  const actionHooks = globalThis.crucible?.api?.hooks?.action;
+  if (actionHooks) {
+    actionHooks[REVEAL_ACTION] = revealSelfTargetHooks(actionHooks[REVEAL_ACTION],
+      () => game.settings.get(moduleId, "revealLight"));
+  }
 
   // updateChatMessage fires on every client; only the active GM writes the token, so the light is placed once.
   Hooks.on("updateChatMessage", async (message, changed) => {

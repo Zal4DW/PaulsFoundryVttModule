@@ -18,6 +18,26 @@ export function isRevealConfirm(crucibleFlags, changed) {
   return changed?.flags?.crucible?.confirmed === true;
 }
 
+/**
+ * Crucible action hooks that let Reveal target its caster. Crucible ships Reveal as a single-target action with
+ * `target.self: false`, so its use dialog refuses the caster's own token and refuses an empty target list too.
+ * The spell says the tosslight "can hover near your body", so the caster is a fair target. With `self` on, Crucible
+ * accepts the caster's token as the target, and with nothing targeted it targets the caster.
+ * @param {object} [existing]          Hooks already registered for Reveal; their `prepare` still runs first.
+ * @param {() => boolean} [enabled]    Read at each prepare, so the setting can change without a reload.
+ * @returns {object} Hooks for `crucible.api.hooks.action.reveal`.
+ */
+export function revealSelfTargetHooks(existing = {}, enabled = () => true) {
+  const prior = existing.prepare;
+  return {
+    ...existing,
+    prepare() {
+      if (prior instanceof Function) prior.call(this);
+      if (enabled()) this.target.self = true;
+    }
+  };
+}
+
 /** The token the tosslight goes on: the card's first target, or the caster when nothing was targeted. */
 export function tosslightTokenUuid(crucibleFlags) {
   return crucibleFlags?.targets?.find((t) => t.token)?.token ?? crucibleFlags?.token ?? null;
