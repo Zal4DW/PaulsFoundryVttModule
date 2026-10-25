@@ -93,6 +93,26 @@ export function logTrade(log, entry) {
   return [...(log ?? []), entry].slice(-LOG_LIMIT);
 }
 
+/** True for an actor's Item Piles flag data that makes it an enabled Item Piles merchant. */
+export const isItemPilesMerchant = (data) => !!data && data.enabled !== false && data.type === "merchant";
+
+/**
+ * Turn an Item Piles merchant's settings into merchant data. Its stock is the actor's own items, which stay where
+ * they are as held items, so the catalogue starts empty.
+ * @param {{buyPriceModifier?: number, sellPriceModifier?: number}} data  The actor's flags["item-piles"].data.
+ */
+export function fromItemPilesMerchant(data = {}) {
+  const pct = (v, d) => (Number.isFinite(Number(v)) ? Number(v) * 100 : d);
+  return normaliseMerchant({ buyRate: pct(data.buyPriceModifier, 100), sellRate: pct(data.sellPriceModifier, 50) });
+}
+
+/**
+ * Crucible Shop shops that can be imported: those with their own item list. A "default" shop sells from
+ * Crucible's whole equipment list, which has no list to copy.
+ * @param {Record<string, {id: string, name: string, mode?: string, itemUuids?: string[]}>} shops
+ */
+export const importableShops = (shops = {}) => Object.values(shops).filter((s) => s?.mode !== "default" && (s?.itemUuids?.length ?? 0) > 0);
+
 /**
  * Turn a Crucible Shop shop into merchant data. Crucible Shop lists items by uuid with no stock, so each line is unlimited.
  * @param {{itemUuids?: string[], buyRate?: number, sellRate?: number, requireApproval?: boolean}} shop

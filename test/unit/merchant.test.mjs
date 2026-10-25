@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkBuy, checkSell, findUndoable, fromCrucibleShop, LOG_LIMIT, logTrade, markUndone, normaliseMerchant, priceFor, restoreCatalogue, takeFromCatalogue } from "../../scripts/lib/merchant.mjs";
+import { checkBuy, checkSell, findUndoable, fromCrucibleShop, fromItemPilesMerchant, importableShops, isItemPilesMerchant, LOG_LIMIT, logTrade, markUndone, normaliseMerchant, priceFor, restoreCatalogue, takeFromCatalogue } from "../../scripts/lib/merchant.mjs";
 
 describe("normaliseMerchant", () => {
   it("fills in the defaults", () => {
@@ -123,5 +123,31 @@ describe("undo bookkeeping", () => {
   it("marks a trade undone once", () => {
     expect(markUndone(log, "t1")[0].undone).toBe(true);
     expect(findUndoable(markUndone(log, "t1"), "t1").reason).toBe("alreadyUndone");
+  });
+});
+
+describe("Item Piles merchants", () => {
+  it("recognises an enabled Item Piles merchant only", () => {
+    expect(isItemPilesMerchant({ enabled: true, type: "merchant" })).toBe(true);
+    expect(isItemPilesMerchant({ type: "merchant" })).toBe(true);
+    expect(isItemPilesMerchant({ enabled: false, type: "merchant" })).toBe(false);
+    expect(isItemPilesMerchant({ enabled: true, type: "pile" })).toBe(false);
+    expect(isItemPilesMerchant(undefined)).toBe(false);
+  });
+
+  it("turns price modifiers into rates, with Item Piles' defaults when unset", () => {
+    expect(fromItemPilesMerchant({ buyPriceModifier: 0.5, sellPriceModifier: 0.5 })).toMatchObject({ buyRate: 50, sellRate: 50, catalogue: [] });
+    expect(fromItemPilesMerchant({})).toMatchObject({ buyRate: 100, sellRate: 50 });
+  });
+});
+
+describe("importableShops", () => {
+  it("skips Crucible Shop's default shop and empty shops", () => {
+    const shops = {
+      default: { id: "default", mode: "default", itemUuids: [] },
+      clipper: { id: "clipper", mode: "custom", itemUuids: ["U"] },
+      empty: { id: "empty", mode: "custom", itemUuids: [] }
+    };
+    expect(importableShops(shops).map((s) => s.id)).toEqual(["clipper"]);
   });
 });

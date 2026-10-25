@@ -688,4 +688,102 @@ export function registerQuenchBatches(quench, moduleId) {
     },
     { displayName: "Paul's Foundry Module: merchant selling" }
   );
+
+  quench.registerBatch(
+    `${moduleId}.merchantSetup`,
+    (context) => {
+      const { describe, it, assert, before, after } = context;
+      const api = () => game.modules.get(moduleId).api;
+      const made = [];
+      let kitUuid;
+
+      describe("Merchant setup and import", function () {
+        this.timeout(20_000);
+
+        before(async function () {
+          if (game.system.id !== "crucible" || !game.user.isGM) this.skip();
+          kitUuid = (await game.packs.get(`${moduleId}.items`).getIndex()).find((e) => e.name === "Wound Medical Kit").uuid;
+        });
+
+        after(async () => {
+          const ids = made.filter((id) => game.actors.has(id));
+          if (ids.length) await Actor.deleteDocuments(ids);
+        });
+
+        it("extends the token class so a player's double-click can open a shop", () => {
+          assert.equal(CONFIG.Token.objectClass.name, "MerchantToken");
+          assert.isTrue(Object.hasOwn(CONFIG.Token.objectClass.prototype, "_onClickLeft2"));
+        });
+
+        // The v14 docs list getDocumentContextOptions only. The directory builds the hook name from the document name
+        // (client/applications/sidebar/document-directory.mjs), so this fails if Foundry stops firing it for actors.
+        it("adds Merchant setup and Open shop to the Actors sidebar menu", function () {
+          if (!ui.actors?._getEntryContextOptions) this.skip();
+          let items = null;
+          const hookId = Hooks.on("getActorContextOptions", (_app, menuItems) => { items = menuItems; });
+          try {
+            ui.actors._doEvent(ui.actors._getEntryContextOptions, { hookName: `get${ui.actors.documentName}ContextOptions`, hookResponse: true });
+          } finally {
+            Hooks.off("getActorContextOptions", hookId);
+          }
+          assert.isArray(items, "getActorContextOptions did not fire");
+          const labels = items.map((i) => i.label ?? i.name);
+          assert.include(labels, "PFM.Merchant.Setup");
+          assert.include(labels, "PFM.Merchant.Open");
+        });
+
+        it("saves rates, approval and catalogue counts from the setup window", async () => {
+          const actor = await Actor.create({ name: "PFM Quench Setup", type: "adversary" });
+          made.push(actor.id);
+          await api().setMerchant(actor, { catalogue: [{ id: "kit", uuid: kitUuid, count: null }] });
+          const app = api().configureMerchant(actor);
+          await new Promise((r) => setTimeout(r, 500));
+          try {
+            const form = app.element;
+            form.elements.buyRate.value = "70";
+            form.elements.requireApproval.checked = true;
+            form.elements["count.kit"].value = "4";
+            form.elements["price.kit"].value = "123";
+            form.requestSubmit();
+            await new Promise((r) => setTimeout(r, 800));
+            const data = actor.getFlag(moduleId, "merchant");
+            assert.equal(data.buyRate, 70);
+            assert.isTrue(data.requireApproval);
+            assert.deepInclude(data.catalogue[0], { id: "kit", count: 4, price: 123 });
+          } finally {
+            await app.close();
+          }
+        });
+
+        it("turns an Item Piles merchant into ours, keeps its items and turns Item Piles off", async () => {
+          const kit = (await fromUuid(kitUuid)).toObject();
+          kit.system.quantity = 2;
+          const actor = await Actor.create({ name: "PFM Quench Muskrat", type: "adversary", items: [kit],
+            flags: { "item-piles": { data: { enabled: true, type: "merchant", buyPriceModifier: 0.5, sellPriceModifier: 0.25 } } } });
+          made.push(actor.id);
+          await api().importItemPilesMerchant(actor);
+          const data = actor.getFlag(moduleId, "merchant");
+          assert.equal(data.buyRate, 50);
+          assert.equal(data.sellRate, 25);
+          assert.isFalse(actor.getFlag("item-piles", "data").enabled);
+          assert.equal(actor.items.find((i) => i.name === "Wound Medical Kit").system.quantity, 2);
+        });
+
+        it("imports a Crucible Shop shop when Crucible Shop is active", async function () {
+          if (!game.modules.get("crucible-shop")?.active) this.skip();
+          const shops = game.settings.get("crucible-shop", "shops") ?? {};
+          const shop = Object.values(shops).find((s) => s.mode !== "default" && s.itemUuids?.length);
+          if (!shop) this.skip();
+          const actor = await api().importCrucibleShop(shop.id);
+          made.push(actor.id);
+          const data = actor.getFlag(moduleId, "merchant");
+          assert.lengthOf(data.catalogue, shop.itemUuids.length);
+          assert.isTrue(data.catalogue.every((l) => l.count === null));
+          const again = await api().importCrucibleShop(shop.id);
+          assert.equal(again.id, actor.id, "importing twice updates the same actor");
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: merchant setup" }
+  );
 }

@@ -83,3 +83,61 @@ test("a player trades over the socket, and only for their own hero", async ({ pa
     }, { id: MODULE_ID, ids });
   }
 });
+
+test("a player opens the shop from an invite and buys with the Buy button", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  await join(page, GM, GM_PASSWORD);
+  test.skip(!(await page.evaluate(() => game.system.id === "crucible")), "The merchant needs the Crucible system");
+
+  const ids = await page.evaluate(async ({ id, name }) => {
+    const old = game.users.getName(name);
+    if (old) await old.delete();
+    const player = await globalThis.User.create({ name, role: CONST.USER_ROLES.PLAYER });
+    const hero = await Actor.create({ name: "E2E Shopper", type: "hero", system: { currency: 500 }, ownership: { [player.id]: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER } });
+    await player.update({ character: hero.id });
+    const merchant = await Actor.create({ name: "E2E Stall", type: "adversary" });
+    const kit = (await game.packs.get(`${id}.items`).getIndex()).find((e) => e.name === "Wound Medical Kit");
+    const api = game.modules.get(id).api;
+    await api.setMerchant(merchant, { buyRate: 100, catalogue: [{ id: "kit", uuid: kit.uuid, count: 1 }] });
+    return { player: player.id, hero: hero.id, merchant: merchant.id };
+  }, { id: MODULE_ID, name: PLAYER });
+
+  const context = await browser.newContext();
+  const playerPage = await context.newPage();
+  try {
+    await join(playerPage, PLAYER);
+    // Invite after the player joins, so the card arrives in their chat log.
+    await page.evaluate(async ({ id, ids: x }) => game.modules.get(id).api.inviteToMerchant(x.merchant, [x.player]), { id: MODULE_ID, ids });
+    // Crucible opens its welcome journal on login, sometimes a moment late, and it can cover the chat log. Close
+    // framed windows and show the chat, then send the clicks to the buttons themselves so a late window can't eat them.
+    await playerPage.evaluate(async () => {
+      const open = [...foundry.applications.instances.values()].filter((app) => app.hasFrame && app.rendered);
+      await Promise.all(open.map((app) => app.close()));
+      ui.sidebar.changeTab("chat", "primary");
+      ui.sidebar.expand();
+    });
+    await playerPage.locator(".pfm-merchant-open").last().dispatchEvent("click");
+    const shop = playerPage.locator(`#pfm-merchant-${ids.merchant}`);
+    await expect(shop.locator(".pfm-merchant-row")).toHaveCount(1);
+    await shop.locator('button[data-action="buy"]').dispatchEvent("click");
+    await expect(shop.locator(".pfm-merchant-soldout")).toBeVisible({ timeout: 15_000 });
+
+    const state = await page.evaluate((x) => ({
+      purse: game.actors.get(x.hero).system.currency,
+      kits: game.actors.get(x.hero).items.filter((i) => i.name === "Wound Medical Kit").length,
+      count: game.actors.get(x.merchant).getFlag("pauls-foundry-module", "merchant").catalogue[0].count
+    }), ids);
+    expect(state).toEqual({ purse: 200, kits: 1, count: 0 });
+  } finally {
+    await context.close();
+    await page.evaluate(async ({ id, ids: x }) => {
+      const mine = game.messages.filter((m) => {
+        const f = m.flags?.[id];
+        return (f?.merchantReceipt ?? f?.merchantInvite)?.merchantId === x.merchant;
+      });
+      if (mine.length) await ChatMessage.deleteDocuments(mine.map((m) => m.id));
+      await Actor.deleteDocuments([x.hero, x.merchant].filter((a) => game.actors.has(a)));
+      await game.users.get(x.player)?.delete();
+    }, { id: MODULE_ID, ids });
+  }
+});
