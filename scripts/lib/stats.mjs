@@ -306,7 +306,7 @@ export const isAlly = ({ type, partyMember = false, friendly = false, companion 
  */
 export function mergeMeta(prev, fresh, { inCombat = true } = {}) {
   if (!prev) return fresh;
-  if (!fresh.actorId) return { ...prev, dead: !!(prev.dead || fresh.dead), fled: !!(prev.fled || fresh.fled) };
+  if (!fresh.actorId) return { ...prev, combatantId: fresh.combatantId ?? prev.combatantId, dead: !!(prev.dead || fresh.dead), fled: !!(prev.fled || fresh.fled) };
   if (inCombat) return fresh;
   return { ...prev, ...fresh, combatantId: prev.combatantId, dead: !!(prev.dead || fresh.dead), fled: !!(prev.fled || fresh.fled) };
 }

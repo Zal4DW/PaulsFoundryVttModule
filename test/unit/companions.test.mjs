@@ -64,6 +64,11 @@ describe("mergeMeta", () => {
     expect(mergeMeta(sprite, gone)).toEqual(sprite);
   });
 
+  it("takes the live combatant id when a deleted token's combatant is still in the tracker", () => {
+    expect(mergeMeta({ ...sprite, combatantId: "old" }, gone).combatantId).toBe("cS");
+    expect(mergeMeta(sprite, { ...gone, combatantId: null }).combatantId).toBe("cS");
+  });
+
   it("marks a deleted token dead when its combatant was defeated", () => {
     expect(mergeMeta(sprite, { ...gone, dead: true }).dead).toBe(true);
   });
