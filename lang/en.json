@@ -16,7 +16,7 @@
   "PFM.Tosslight.OwnLight": "{token} already gives off light, so Reveal's tosslight was not added. Clear the token's light to use it.",
   "PFM.Tosslight.Taken": "{token} already carries another caster's tosslight.",
   "PFM.Settings.RevealLight.Name": "Reveal makes light (Crucible)",
-  "PFM.Settings.RevealLight.Hint": "When the GM confirms a Reveal card, the target's token (or the caster's, with no target) gets a tosslight: bright 20 ft, dim 40 ft. Each caster has one at a time. Dismiss it from the token HUD.",
+  "PFM.Settings.RevealLight.Hint": "When the GM confirms a Reveal card, the target's token gets a tosslight: bright 20 ft, dim 40 ft. To light themselves, the caster targets their own token or nothing. Each caster has one at a time. Dismiss it from the token HUD.",
   "PFM.Settings.ConfirmOwnMoves.Name": "Confirm my own movement (Crucible)",
   "PFM.Settings.ConfirmOwnMoves.Hint": "For players learning to move. When the GM auto-confirms self actions, your Move cards wait for you instead: the token moves but no AP is spent, so Ctrl+Z takes a mistake back for free. Click Confirm on the card when you are happy. Your next action, or the end of your turn, confirms it for you.",
   "PFM.Settings.ItemPilesIntegration.Name": "Set up Item Piles for Crucible",

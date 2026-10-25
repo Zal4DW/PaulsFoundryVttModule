@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasOwnLight, isRevealConfirm, planTosslight, tosslightTokenUuid, TOSSLIGHT_LIGHT } from "../../scripts/lib/tosslight.mjs";
+import { hasOwnLight, isRevealConfirm, planTosslight, revealSelfTargetHooks, tosslightTokenUuid, TOSSLIGHT_LIGHT } from "../../scripts/lib/tosslight.mjs";
 
 const DARK = { bright: 0, dim: 0 };
 const reveal = (extra = {}) => ({ action: { id: "reveal" }, token: "Scene.s.Token.lyra", targets: [], ...extra });
@@ -50,5 +50,39 @@ describe("Reveal's tosslight", () => {
   it("leaves another caster's tosslight alone", () => {
     const lit = [{ uuid: "T1", caster: "Actor.vex" }];
     expect(planTosslight({ uuid: "T1", light: TOSSLIGHT_LIGHT, tosslight: { caster: "Actor.vex" } }, "Actor.lyra", lit)).toEqual({ place: false, clear: [], reason: "taken" });
+  });
+
+  it("goes on the caster's token when the caster targets themselves", () => {
+    const self = { actor: "Scene.s.Token.lyra.Actor.lyra", token: "Scene.s.Token.lyra" };
+    expect(tosslightTokenUuid(reveal({ targets: [self] }))).toBe("Scene.s.Token.lyra");
+  });
+});
+
+describe("Reveal's self-target hook", () => {
+  // Crucible's Reveal action as it comes from the talent pack: one target, never the caster.
+  const action = () => ({ id: "reveal", target: { type: "single", number: 1, scope: 4, self: false } });
+
+  it("lets Reveal target its caster", () => {
+    const a = action();
+    revealSelfTargetHooks().prepare.call(a);
+    expect(a.target.self).toBe(true);
+    expect(a.target.type).toBe("single");
+  });
+
+  it("leaves Reveal alone while the setting is off", () => {
+    const a = action();
+    revealSelfTargetHooks({}, () => false).prepare.call(a);
+    expect(a.target.self).toBe(false);
+  });
+
+  it("keeps hooks already registered for Reveal, and runs their prepare first", () => {
+    const calls = [];
+    const roll = () => {};
+    const hooks = revealSelfTargetHooks({ roll, prepare() { calls.push(this.target.self); } });
+    const a = action();
+    hooks.prepare.call(a);
+    expect(calls).toEqual([false]);
+    expect(a.target.self).toBe(true);
+    expect(hooks.roll).toBe(roll);
   });
 });
