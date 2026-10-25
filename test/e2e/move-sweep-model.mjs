@@ -23,12 +23,12 @@ export function laneOffsets(size, blockerSize) {
     { dy: -size + 1, label: "1 ft footprint overlap, centre outside" },
     { dy: Math.floor(-half), label: "centre on the blocker's top edge" },
     { dy: Math.floor(-half) + 1, label: "centre 1 ft inside" },
-    { dy: Math.ceil(blockerSize - half), label: "centre on the blocker's bottom edge" },
-    // Keep "centres aligned" last: the spec takes the last lane as the aligned one.
-    { dy: Math.round((blockerSize - size) / 2), label: "centres aligned" }
+    { dy: Math.ceil(blockerSize - half), label: "centre on the blocker's bottom edge" }
   ];
-  const seen = new Set();
-  return lanes.filter(({ dy }) => !seen.has(dy) && seen.add(dy));
+  // The spec takes the last lane as the aligned one, so drop any lane it duplicates and append it at the end.
+  const aligned = { dy: Math.round((blockerSize - size) / 2), label: "centres aligned" };
+  const seen = new Set([aligned.dy]);
+  return [...lanes.filter(({ dy }) => !seen.has(dy) && seen.add(dy)), aligned];
 }
 
 /**

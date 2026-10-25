@@ -26,6 +26,8 @@ describe("move sweep model", () => {
   it("dedupes lanes and gaps", () => {
     expect(laneOffsets(4, 4).map((l) => l.dy)).toEqual([-4, -3, -2, -1, 2, 0]);
     expect(laneOffsets(2, 4).map((l) => l.dy)).toEqual([-2, -1, 0, 3, 1]);
+    // A mover bigger than the blocker: the aligned offset (-1) duplicates another lane but must stay last.
+    expect(laneOffsets(4, 2).at(-1)).toEqual({ dy: -1, label: "centres aligned" });
     expect(targetGaps(4)).toEqual([4, 2, 1, 0, -1, -2, -3]);
   });
 
