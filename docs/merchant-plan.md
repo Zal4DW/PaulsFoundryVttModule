@@ -57,8 +57,8 @@ A merchant is an adversary actor with the flag `pauls-foundry-module.merchant`. 
   sellRate: 50,            // percent of list price the merchant pays
   requireApproval: false,
   catalogue: [             // items listed by compendium or world uuid
-    { uuid: "Compendium.crucible.equipment.Item.helm000000000000", count: null, price: null }, // null count = unlimited
-    { uuid: "Compendium.pauls-foundry-module.items.Item.dose...", count: 1, price: null }
+    { id: "helm", uuid: "Compendium.crucible.equipment.Item.helm000000000000", count: null, price: null }, // null count = unlimited
+    { id: "dose", uuid: "Compendium.pauls-foundry-module.items.Item.dose...", count: 1, price: null }
   ],
   log: []                  // the last 50 trades, for undo
 }
@@ -72,7 +72,7 @@ There are two kinds of stock:
 
 A player can't edit the merchant actor or another hero, so every trade runs on the active GM's client.
 
-1. Add `"socket": true` to `module.json`. The player's window emits a request on `module.pauls-foundry-module`: `{ action: "buy" | "sell", merchantId, actorId, line, quantity, requestId }`.
+1. `module.json` has `"socket": true`. The player's window sends `{ type: "merchantTrade", requestId, request }` on `module.pauls-foundry-module` to the active GM only. `request` is `{ action, merchantId, actorId, source, id, quantity }`: `source` is `"catalogue"` or `"held"`, and `id` is the line id or the held item's id. The GM takes the sender's user id from the server, which sets it from the sender's authenticated socket, never from the message.
 2. The active GM (`game.users.activeGM`) handles the requests one at a time, in a queue. So when two players buy the last Dose at once, the first gets it and the second gets "sold out".
 3. The GM's client checks the trade again with fresh data: stock, the hero's coin, and that the user owns the hero. Then it applies the trade:
    - Buy: take the coin from the hero, create or move the item, lower the count, and post the receipt.
@@ -86,10 +86,9 @@ If no GM is logged in, the window says that trades need a GM.
 
 These use no Foundry globals, so Vitest can test them in Node:
 - `priceFor(listPrice, rate, override)`: rounds to whole copper.
-- `checkBuy(state)` and `checkSell(state)`: return `{ ok, reason }` for no stock, not enough coin, an unsellable item, or quantity 0.
-- `applyBuy(merchant, line, qty)` and `applySell(...)`: return the new merchant data and the coin change.
-- `undoTrade(merchant, entry)`.
-- `fromCrucibleShop(shop)` and `fromItemPilesMerchant(flags, items)`: the import helpers.
+- Phase 1 (built): `normaliseMerchant(data)`, `priceFor(listPrice, rate, override)`, `checkBuy(state)`, `takeFromCatalogue(catalogue, lineId, qty)`, `logTrade(log, entry)` and `fromCrucibleShop(shop, makeId)`.
+- Phase 2: `checkSell(state)`, plus helpers to put stock back and mark a trade undone.
+- Phase 3: `fromItemPilesMerchant(flags, items)`, to import Muskrat.
 
 ### Windows
 

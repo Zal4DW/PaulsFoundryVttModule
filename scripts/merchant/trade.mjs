@@ -19,11 +19,17 @@ export const isStackable = (item) => !!(item?.system?.properties?.has?.("stackab
 export function registerMerchantSocket(moduleId) {
   // The manifest's "socket": true gives the module the event module.<id>. Socket.io relays a message to the other
   // clients only, so the GM's own requests skip the socket (see requestTrade).
-  game.socket.on(`module.${moduleId}`, (msg) => {
+  // The v14 docs don't describe the handler's arguments. The v14 server (dist/server/sockets.mjs, handleCustomSocket)
+  // relays each message as (data, senderUserId), with the id taken from the sender's authenticated socket, and
+  // delivers to {recipients} when given. So the GM trusts that id, never a user id inside the message.
+  const channel = `module.${moduleId}`;
+  game.socket.on(channel, (msg, senderId) => {
     if (msg?.type === "merchantTrade" && game.users.activeGM?.isSelf) {
-      enqueue(moduleId, msg.request, msg.userId).then((result) => game.socket.emit(`module.${moduleId}`, { type: "merchantResult", requestId: msg.requestId, to: msg.userId, result }));
+      if (!game.users.get(senderId)) return;
+      enqueue(moduleId, msg.request, senderId).then((result) => game.socket.emit(channel, { type: "merchantResult", requestId: msg.requestId, result }, { recipients: [senderId] }));
     }
-    if (msg?.type === "merchantResult" && msg.to === game.user.id) {
+    // Only the active GM's answer counts.
+    if (msg?.type === "merchantResult" && senderId === game.users.activeGM?.id) {
       pending.get(msg.requestId)?.(msg.result);
       pending.delete(msg.requestId);
     }
@@ -42,7 +48,7 @@ export function requestTrade(moduleId, request) {
   const requestId = foundry.utils.randomID();
   return new Promise((resolve) => {
     pending.set(requestId, resolve);
-    game.socket.emit(`module.${moduleId}`, { type: "merchantTrade", requestId, userId: game.user.id, request });
+    game.socket.emit(`module.${moduleId}`, { type: "merchantTrade", requestId, request }, { recipients: [gm.id] });
     setTimeout(() => { if (pending.delete(requestId)) resolve({ ok: false, reason: "timeout" }); }, TIMEOUT_MS);
   });
 }
@@ -89,8 +95,15 @@ async function buy(moduleId, { merchantId, actorId, source, id, quantity }, user
   const check = checkBuy({ quantity, stock: found.stock, unitPrice, purse: hero.system.currency });
   if (!check.ok) return check;
 
-  await hero.update({ "system.currency": hero.system.currency - check.total });
-  await giveItem(hero, item, quantity, line?.uuid ?? null);
+  const purse = hero.system.currency;
+  await hero.update({ "system.currency": purse - check.total });
+  try {
+    await giveItem(hero, item, quantity, line?.uuid ?? null);
+  } catch (err) {
+    // The hero paid but got nothing: give the coin back before the queue logs the error.
+    await hero.update({ "system.currency": purse });
+    throw err;
+  }
   if (source === "held") {
     const left = (item.system.quantity ?? 1) - quantity;
     if (left > 0) await item.update({ "system.quantity": left });

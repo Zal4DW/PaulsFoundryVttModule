@@ -293,9 +293,12 @@ export function registerQuenchBatches(quench, moduleId) {
         });
 
         after(async () => {
-          const receipts = game.messages.filter((m) => m.getFlag(moduleId, "merchantReceipt")?.merchantId === merchant?.id);
-          if (receipts.length) await ChatMessage.deleteDocuments(receipts.map((m) => m.id));
-          await merchant?.delete();
+          // Mocha runs after() even when before() skipped, and then merchant is undefined.
+          if (merchant) {
+            const receipts = game.messages.filter((m) => m.getFlag(moduleId, "merchantReceipt")?.merchantId === merchant.id);
+            if (receipts.length) await ChatMessage.deleteDocuments(receipts.map((m) => m.id));
+            await merchant.delete();
+          }
           await hero?.delete();
         });
 
