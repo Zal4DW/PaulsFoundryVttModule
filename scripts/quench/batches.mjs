@@ -202,9 +202,11 @@ export function registerQuenchBatches(quench, moduleId) {
             await group.sheet?.close();
             await group.delete();
           }
+          assert.include(["open", "pick"], result.mode, "C found no one to open");
           assert.notEqual(result.uuid, group.uuid, "C opened the party");
           assert.notInclude(offered, group.uuid, "the picker offered the party");
           if (result.mode === "open") assert.equal(result.uuid, temp.uuid);
+          else assert.include(offered, temp.uuid, "the picker left out the party's member");
         });
       });
     },
