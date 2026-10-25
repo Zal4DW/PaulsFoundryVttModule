@@ -23,3 +23,6 @@ Thumbs.db
 packs/*
 !packs/_source/
 module.zip
+
+# Movement sweep output (test/e2e/move-sweep.spec.mjs)
+sweep-results/

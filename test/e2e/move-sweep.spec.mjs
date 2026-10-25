@@ -22,7 +22,8 @@ const PLAYER = "PFM Sweep Player";
 const PREFIX = "PFM Sweep";
 const SIZES = (process.env.PFM_SWEEP_SIZES ?? "2,4,5,8,10").split(",").map(Number);
 const OBSTACLES = (process.env.PFM_SWEEP_OBSTACLES ?? "wall,token,hidden,dark").split(",");
-const OUT = `test-results/move-sweep/${process.env.PFM_SWEEP_SIZES ?? "all"}-${process.env.PFM_SWEEP_OBSTACLES ?? "all"}`;
+// Not under test-results/: Playwright empties that folder at the start of every run.
+const OUT = `sweep-results/${process.env.PFM_SWEEP_SIZES ?? "all"}-${process.env.PFM_SWEEP_OBSTACLES ?? "all"}`;
 
 // Scene layout, in feet (one microgrid cell each). The obstacle's left face is at OBSTACLE_X.
 const BLOCKER_SIZE = 4;
@@ -47,8 +48,21 @@ async function join(page, user, password = "") {
   await page.waitForFunction(() => globalThis.game?.ready === true && canvas.ready, null, { timeout: 45_000 });
 }
 
+// Other kinds of blocking token, for PFM_SWEEP_OBSTACLES=actors. Crucible's isBlocker
+// (module/canvas/movement-polygon.mjs) skips dead actors, Secret tokens for players, and tokens on another level, but
+// checks nothing about disposition, ownership or combat for the blocker itself.
+const BLOCKER_KINDS = [
+  { key: "ownHero", label: "a hero the same player owns", type: "hero", disposition: "FRIENDLY", owned: true },
+  { key: "otherHero", label: "another player's hero", type: "hero", disposition: "FRIENDLY" },
+  { key: "neutral", label: "a neutral adversary", disposition: "NEUTRAL" },
+  { key: "secret", label: "a Secret-disposition adversary", disposition: "SECRET" },
+  { key: "bystander", label: "a hostile adversary not in the combat", combat: false },
+  { key: "defeated", label: "a hostile adversary at 0 health", defeated: true },
+  { key: "large", label: "a hostile 8 ft adversary", size: 8 }
+];
+
 /** Every case for one mover size: the obstacle, the lane and a label. */
-function casesFor(size) {
+function casesFor(size, setup) {
   const cases = [];
   if (OBSTACLES.includes("wall")) cases.push({ obstacle: "wall", variant: "wall", dy: 0, lane: "wall spans the lane" });
   const lanes = laneOffsets(size, BLOCKER_SIZE);
@@ -63,6 +77,17 @@ function casesFor(size) {
   if (OBSTACLES.includes("dark")) {
     cases.push({ obstacle: "token", variant: "dark", dy: aligned.dy, lane: aligned.label });
     cases.push({ obstacle: "wall", variant: "dark-wall", dy: 0, lane: "wall spans the lane" });
+  }
+  if (OBSTACLES.includes("actors")) {
+    for (const kind of BLOCKER_KINDS) {
+      const blockerId = setup.blockers[kind.key];
+      const blockerSize = setup.sizes[blockerId];
+      const kindLanes = laneOffsets(size, blockerSize);
+      const picks = [kindLanes.at(-1), kindLanes.find((l) => l.label.startsWith("1 ft"))];
+      for (const l of picks) {
+        cases.push({ obstacle: "token", variant: kind.key, kind: kind.label, blockerId, blockerSize, dy: l.dy, lane: l.label });
+      }
+    }
   }
   return cases;
 }
@@ -80,7 +105,7 @@ test("token movement collision sweep", async ({ browser }) => {
     await join(gm, GM, GM_PASSWORD);
 
     // GM: player user, scene, actors, tokens and combat.
-    setup = await gm.evaluate(async ({ PLAYER, PREFIX, SIZES, BLOCKER_SIZE }) => {
+    setup = await gm.evaluate(async ({ PLAYER, PREFIX, SIZES, BLOCKER_SIZE, KINDS }) => {
       const { Combat, Scene, User } = globalThis;
       // The GM's set-up moves use the "displace" action: no wall or token collision, and no Move card.
       globalThis.pfmSweepDisplace = (scene, updates) => scene.updateEmbeddedDocuments("Token", updates, {
@@ -116,26 +141,48 @@ test("token movement collision sweep", async ({ browser }) => {
         system: { movement: { sizeBonus: size - 4 } }
       }));
       actorData.push({ name: `${PREFIX} Blocker`, type: "adversary", system: { movement: { sizeBonus: BLOCKER_SIZE - 4 } } });
+      const kinds = KINDS ?? [];
+      for (const k of kinds) {
+        actorData.push({ name: `${PREFIX} Blocker ${k.key}`, type: k.type ?? "adversary",
+          ownership: k.owned ? owner : { default: 0 },
+          system: { movement: { sizeBonus: (k.size ?? BLOCKER_SIZE) - 4 } } });
+      }
       const actors = await Actor.implementation.createDocuments(actorData);
+      const kindOf = (a) => kinds.find((k) => a.name === `${PREFIX} Blocker ${k.key}`);
       const tokenData = await Promise.all(actors.map((a, i) => a.getTokenDocument({
-        x: 100 + (i * 200), y: 1400, disposition: CONST.TOKEN_DISPOSITIONS.HOSTILE,
+        x: 100 + ((i % 15) * 200), y: 1400 - (Math.floor(i / 15) * 200),
+        disposition: CONST.TOKEN_DISPOSITIONS[kindOf(a)?.disposition ?? "HOSTILE"],
         sight: { enabled: true, range: 60 }
       })));
       const tokens = await scene.createEmbeddedDocuments("Token", tokenData.map((t) => t.toObject()));
       const combat = await Combat.implementation.create({ scene: scene.id, active: true });
-      await combat.createEmbeddedDocuments("Combatant", tokens.map((t) => ({ tokenId: t.id, sceneId: scene.id, actorId: t.actorId })));
+      const fighting = tokens.filter((t) => kindOf(t.actor)?.combat !== false);
+      await combat.createEmbeddedDocuments("Combatant", fighting.map((t) => ({ tokenId: t.id, sceneId: scene.id, actorId: t.actorId })));
       await combat.update({ round: 1, turn: 0 });
-      const ids = Object.fromEntries(SIZES.map((size, i) => [size, tokens[i].id]));
+      // A defeated blocker: health 0 on the token's own actor. Crucible's isBlocker skips actors whose isDead is true.
+      for (const t of tokens.filter((t) => kindOf(t.actor)?.defeated)) {
+        await t.actor.update({ "system.resources.health.value": 0 });
+      }
+      // Match tokens to actors by id: createEmbeddedDocuments does not keep the order of its input.
+      const tokenOf = (actor) => tokens.find((t) => t.actorId === actor.id).id;
+      // Look actors up by name: createDocuments does not keep the order of its input either.
+      const actorNamed = (name) => actors.find((a) => a.name === name);
+      const moverActor = (size) => actorNamed(`${PREFIX} Mover ${size}ft`);
+      const ids = Object.fromEntries(SIZES.map((size) => [size, tokenOf(moverActor(size))]));
+      const moverActors = Object.fromEntries(SIZES.map((size) => [size, moverActor(size).id]));
       return {
         priorScene, priorPaused, userId: user.id, sceneId: scene.id, combatId: combat.id,
-        actorIds: actors.map((a) => a.id), movers: ids, blocker: tokens.at(-1).id,
+        actorIds: actors.map((a) => a.id), moverActors, movers: ids, blocker: tokenOf(actorNamed(`${PREFIX} Blocker`)),
         sizes: Object.fromEntries(tokens.map((t) => [t.id, t.width])),
-        dead: actors.map((a) => a.system.isDead), autoConfirm: game.settings.get("crucible", "autoConfirm"),
+        blockers: Object.fromEntries(kinds.map((k) => [k.key, tokenOf(actorNamed(`${PREFIX} Blocker ${k.key}`))])),
+        dead: Object.fromEntries(tokens.map((t) => [t.name, t.actor.system.isDead])), autoConfirm: game.settings.get("crucible", "autoConfirm"),
         backend: CONFIG.Canvas.polygonBackends.move.name, version: game.version, crucible: game.system.version
       };
-    }, { PLAYER, PREFIX, SIZES, BLOCKER_SIZE });
+    }, { PLAYER, PREFIX, SIZES, BLOCKER_SIZE, KINDS: OBSTACLES.includes("actors") ? BLOCKER_KINDS : null });
     console.log("setup", JSON.stringify(setup));
-    expect(setup.dead.every((d) => !d), "a dead blocker never collides").toBe(true);
+    // Only the defeated kind may be dead: Crucible never treats a dead actor as a blocker.
+    const deadNames = Object.entries(setup.dead).filter(([, d]) => d).map(([n]) => n);
+    expect(deadNames.filter((n) => !n.endsWith("defeated")), "a dead blocker never collides").toEqual([]);
 
     await join(player, PLAYER);
     await player.evaluate(async (id) => {
@@ -151,6 +198,14 @@ test("token movement collision sweep", async ({ browser }) => {
       // sends that path minus its origin as a "dragging" movement with _getDragLeftDropUpdateOptions(). Then
       // TokenDocument#_preUpdate constrains it again with preview: false, preMoveToken fires, and Crucible makes the
       // Move card. Everything after the drop is the real code path.
+      // Keep every notification the player sees, so a rejected drop shows its reason.
+      globalThis.pfmSweepNotes = [];
+      const notify = ui.notifications.notify.bind(ui.notifications);
+      ui.notifications.notify = (message, type, options) => {
+        globalThis.pfmSweepNotes.push(`${type}: ${message}`);
+        return notify(message, type, options);
+      };
+
       globalThis.pfmSweepDrop = (id, x, y) => {
         const token = canvas.tokens.get(id);
         const s = token.document._source;
@@ -169,7 +224,7 @@ test("token movement collision sweep", async ({ browser }) => {
     for (const size of SIZES) {
       const moverId = setup.movers[size];
       const actualSize = setup.sizes[moverId];
-      for (const c of casesFor(size)) {
+      for (const c of casesFor(size, setup)) {
         // GM: place the mover at the start of its lane and set up the obstacle for this case.
         await gm.evaluate(async ({ setup, moverId, c, size, OBSTACLE_X, OBSTACLE_Y, START_GAP }) => {
           const scene = game.scenes.get(setup.sceneId);
@@ -181,10 +236,16 @@ test("token movement collision sweep", async ({ browser }) => {
           const updates = Object.values(setup.movers).filter((id) => id !== moverId).map(park);
           updates.push({ _id: moverId, x: (OBSTACLE_X - START_GAP - size) * g, y: (OBSTACLE_Y + c.dy) * g,
             sight: { enabled: true, range: dark ? 0 : 60 } });
-          if (c.obstacle === "token") {
-            updates.push({ _id: setup.blocker, x: OBSTACLE_X * g, y: OBSTACLE_Y * g, hidden: c.variant === "hidden" });
-          } else {
-            updates.push({ ...park(setup.blocker, 9) });
+          // The case's blocker goes at the obstacle; every other blocker is parked out of the way.
+          const active = c.obstacle === "token" ? (c.blockerId ?? setup.blocker) : null;
+          for (const [i, id] of [setup.blocker, ...Object.values(setup.blockers)].entries()) {
+            if (id === active) {
+              updates.push({ _id: id, x: OBSTACLE_X * g, y: OBSTACLE_Y * g, hidden: c.variant === "hidden" });
+            } else {
+              updates.push({ _id: id, x: 100 + (i * 200), y: 1000, hidden: false });
+            }
+          }
+          if (c.obstacle === "wall") {
             await scene.createEmbeddedDocuments("Wall", [{ c: [OBSTACLE_X * g, 0, OBSTACLE_X * g, scene.height],
               move: CONST.WALL_MOVEMENT_TYPES.NORMAL, sight: CONST.WALL_SENSE_TYPES.NORMAL }]);
           }
@@ -198,12 +259,11 @@ test("token movement collision sweep", async ({ browser }) => {
         await player.evaluate(({ x, y }) => canvas.pan({ x: x * 20, y: y * 20, scale: 1 }), { x: OBSTACLE_X - 2, y: OBSTACLE_Y + 2 });
         await player.waitForTimeout(300);
 
-        const limits = stopGap({ obstacle: c.obstacle, size: actualSize, dy: c.dy, blockerSize: BLOCKER_SIZE });
+        const limits = stopGap({ obstacle: c.obstacle, size: actualSize, dy: c.dy, blockerSize: c.blockerSize ?? BLOCKER_SIZE });
         for (const gap of targetGaps(actualSize)) {
-          await gm.evaluate(({ actorId }) => {
-            const a = game.actors.get(actorId);
-            return a.update({ "system.resources.action.value": 99 });
-          }, { actorId: setup.actorIds[SIZES.indexOf(size)] });
+          // The movers are unlinked tokens, so AP lives on the token's own actor, not the sidebar actor. It caps at 6.
+          await gm.evaluate(({ sceneId, moverId }) => game.scenes.get(sceneId).tokens.get(moverId).actor
+            .update({ "system.resources.action.value": 99 }), { sceneId: setup.sceneId, moverId });
 
           const target = { x: OBSTACLE_X - gap - actualSize, y: OBSTACLE_Y + c.dy };
           const before = await player.evaluate(({ moverId, blockerId, target }) => {
@@ -231,9 +291,12 @@ test("token movement collision sweep", async ({ browser }) => {
               centreHit: hit ? { x: ft(hit.x), y: ft(hit.y) } : null,
               inCombat: token.inCombat,
               blockerVisible: blocker?.visible ?? null,
-              messages: game.messages.size
+              messages: game.messages.size,
+              heldWaiting: game.messages.filter((m) => m.flags?.crucible?.actor === token.actor.uuid
+                && m.flags?.["pauls-foundry-module"]?.heldForPlayer && !m.flags?.crucible?.confirmed).length,
+              stale: globalThis.pfmSweepNotes.splice(0)
             };
-          }, { moverId, blockerId: setup.blocker, target });
+          }, { moverId, blockerId: c.blockerId ?? setup.blocker, target });
 
           if (before.origin.x === target.x && before.origin.y === target.y) continue;
 
@@ -260,7 +323,7 @@ test("token movement collision sweep", async ({ browser }) => {
             delete globalThis.__sweepSettled;
             return { x: token.document.x / canvas.grid.size, y: token.document.y / canvas.grid.size,
               state, cardId: card?.id ?? null, held: !!card?.flags?.["pauls-foundry-module"]?.heldForPlayer,
-              confirmed: !!card?.flags?.crucible?.confirmed };
+              confirmed: !!card?.flags?.crucible?.confirmed, notes: globalThis.pfmSweepNotes.splice(0) };
           }, { moverId, count: before.messages }, { timeout: 15_000, polling: 100 }).then((h) => h.jsonValue());
 
           // Give the GM's client time to mark the card as held, then confirm it with the module's button.
@@ -285,15 +348,15 @@ test("token movement collision sweep", async ({ browser }) => {
           const row = {
             size: actualSize, variant: c.variant, obstacle: c.obstacle, dy: c.dy, lane: c.lane, gap,
             planned: target, ...before, final: { x: after.x, y: after.y }, state: after.state,
-            card: !!after.cardId, held: after.held, confirm, drop, ms: Date.now() - started,
+            card: !!after.cardId, held: after.held, notes: after.notes, confirm, drop, ms: Date.now() - started,
             outcome: outcome({ planned: target, origin: before.origin, final: { x: after.x, y: after.y } }),
             footprintAllows: allows(limits.footprint, gap), centreAllows: allows(limits.centre, gap),
             finalGap: OBSTACLE_X - (after.x + actualSize)
           };
           delete row.messages;
           rows.push(row);
-          console.log(JSON.stringify({ ms: row.ms, s: row.size, v: row.variant, dy: row.dy, gap, out: row.outcome,
-            final: row.final, preview: row.preview, real: row.real, centreHit: row.centreHit, confirm: row.confirm }));
+          // The whole row goes to the console too, so the log alone is a complete record of the run.
+          console.log("row", JSON.stringify(row));
         }
       }
     }
@@ -311,8 +374,8 @@ test("token movement collision sweep", async ({ browser }) => {
       await player.waitForFunction((id) => canvas.tokens.get(id)?.document.x === 1000, moverId, { timeout: 15_000 });
       await player.evaluate(() => canvas.pan({ x: 1200, y: 300, scale: 1 }));
       await player.waitForTimeout(300);
-      await gm.evaluate((id) => game.actors.get(id).update({ "system.resources.action.value": 99 }),
-        setup.actorIds[SIZES.indexOf(size)]);
+      await gm.evaluate(({ sceneId, moverId }) => game.scenes.get(sceneId).tokens.get(moverId).actor
+        .update({ "system.resources.action.value": 99 }), { sceneId: setup.sceneId, moverId });
 
       // Runs in the player's page, with timestamps, so the round trips to the GM's client show up.
       return player.evaluate(async ({ moverId, MODULE_ID }) => {
