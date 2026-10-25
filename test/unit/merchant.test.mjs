@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkBuy, fromCrucibleShop, LOG_LIMIT, logTrade, normaliseMerchant, priceFor, takeFromCatalogue } from "../../scripts/lib/merchant.mjs";
+import { checkBuy, checkSell, findUndoable, fromCrucibleShop, LOG_LIMIT, logTrade, markUndone, normaliseMerchant, priceFor, restoreCatalogue, takeFromCatalogue } from "../../scripts/lib/merchant.mjs";
 
 describe("normaliseMerchant", () => {
   it("fills in the defaults", () => {
@@ -78,5 +78,50 @@ describe("fromCrucibleShop", () => {
     const m = fromCrucibleShop({ itemUuids: ["U", "V"], buyRate: 80, sellRate: 50, requireApproval: true }, () => `id${n++}`);
     expect(m).toMatchObject({ buyRate: 80, sellRate: 50, requireApproval: true });
     expect(m.catalogue).toEqual([{ id: "id0", uuid: "U", count: null, price: null }, { id: "id1", uuid: "V", count: null, price: null }]);
+  });
+});
+
+describe("checkSell", () => {
+  const base = { quantity: 2, have: 3, unitPrice: 150 };
+
+  it("pays the sell price for each item", () => {
+    expect(checkSell(base)).toEqual({ ok: true, reason: null, total: 300 });
+  });
+
+  it("refuses a bad quantity, something with no price, an equipped item and more than the hero holds", () => {
+    expect(checkSell({ ...base, quantity: 0 }).reason).toBe("quantity");
+    expect(checkSell({ ...base, sellable: false }).reason).toBe("cantSell");
+    expect(checkSell({ ...base, equipped: true }).reason).toBe("equipped");
+    expect(checkSell({ ...base, quantity: 4 }).reason).toBe("notEnoughItems");
+  });
+});
+
+describe("restoreCatalogue", () => {
+  const cat = [{ id: "a", uuid: "U", count: 0, price: null }, { id: "b", uuid: "V", count: null, price: null }];
+
+  it("puts an undone purchase back on a counted line", () => {
+    expect(restoreCatalogue(cat, "a", 2)[0].count).toBe(2);
+  });
+
+  it("leaves an unlimited line alone", () => {
+    expect(restoreCatalogue(cat, "b", 2)[1].count).toBeNull();
+  });
+});
+
+describe("undo bookkeeping", () => {
+  const log = [{ id: "t1" }, { id: "t2", undone: true }];
+
+  it("finds a trade that can be undone", () => {
+    expect(findUndoable(log, "t1")).toEqual({ entry: { id: "t1" }, reason: null });
+  });
+
+  it("says why a trade can't be undone", () => {
+    expect(findUndoable(log, "t2").reason).toBe("alreadyUndone");
+    expect(findUndoable(log, "nope").reason).toBe("noTrade");
+  });
+
+  it("marks a trade undone once", () => {
+    expect(markUndone(log, "t1")[0].undone).toBe(true);
+    expect(findUndoable(markUndone(log, "t1"), "t1").reason).toBe("alreadyUndone");
   });
 });

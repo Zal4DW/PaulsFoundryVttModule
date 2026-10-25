@@ -1,5 +1,6 @@
 // Quench batches. They run inside a live Foundry world against the real `game` object.
 // main.mjs loads this file from the quenchReady hook only.
+import { decideApproval, handle as handleTrade } from "../merchant/trade.mjs";
 
 export function registerQuenchBatches(quench, moduleId) {
   quench.registerBatch(
@@ -554,5 +555,137 @@ export function registerQuenchBatches(quench, moduleId) {
       });
     },
     { displayName: "Paul's Foundry Module: merchants" }
+  );
+
+  quench.registerBatch(
+    `${moduleId}.merchantSell`,
+    (context) => {
+      const { describe, it, assert, before, after } = context;
+      const api = () => game.modules.get(moduleId).api;
+      let merchant, hero, player, kitUuid, heroKit;
+      const log = () => merchant.getFlag(moduleId, "merchant").log;
+      const kitsOn = (actor) => actor.items.filter((i) => i.name === "Wound Medical Kit").reduce((n, i) => n + (i.system.quantity ?? 1), 0);
+      const waitFor = async (fn, ms = 5000) => {
+        for (let t = 0; t < ms; t += 100) { const v = fn(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); }
+        return null;
+      };
+      const receiptOf = (tradeId) => game.messages.find((m) => m.getFlag(moduleId, "merchantReceipt")?.tradeId === tradeId);
+
+      describe("Merchant selling, approval and undo", function () {
+        this.timeout(30_000);
+
+        before(async function () {
+          if (game.system.id !== "crucible" || !game.user.isGM) this.skip();
+          const pack = game.packs.get(`${moduleId}.items`);
+          kitUuid = (await pack.getIndex()).find((e) => e.name === "Wound Medical Kit").uuid;
+          merchant = await Actor.create({ name: "PFM Quench Fence", type: "adversary" });
+          hero = await Actor.create({ name: "PFM Quench Seller", type: "hero", system: { currency: 0 } });
+          const kit = (await fromUuid(kitUuid)).toObject();
+          kit.system.quantity = 3;
+          [heroKit] = await hero.createEmbeddedDocuments("Item", [kit]);
+          await api().setMerchant(merchant, { buyRate: 100, sellRate: 50, catalogue: [{ id: "kit", uuid: kitUuid, count: 2 }] });
+        });
+
+        after(async () => {
+          // Mocha runs after() even when before() skipped, and then merchant is undefined.
+          if (merchant) {
+            const ours = game.messages.filter((m) => {
+              const f = m.flags?.[moduleId];
+              return (f?.merchantReceipt ?? f?.merchantApproval)?.merchantId === merchant.id;
+            });
+            if (ours.length) await ChatMessage.deleteDocuments(ours.map((m) => m.id));
+            await merchant.delete();
+          }
+          await hero?.delete();
+          await player?.delete();
+        });
+
+        it("buys from a hero at the sell rate and holds the items for resale", async () => {
+          const result = await api().merchantTrade({ action: "sell", merchantId: merchant.id, actorId: hero.id, itemId: heroKit.id, quantity: 2 });
+          assert.isTrue(result.ok, result.reason);
+          assert.equal(hero.system.currency, 300); // 2 × 300cp at 50%
+          assert.equal(kitsOn(hero), 1);
+          assert.equal(kitsOn(merchant), 2);
+          assert.equal(log().at(-1).action, "sell");
+        });
+
+        it("refuses to buy more than the hero holds", async () => {
+          const result = await api().merchantTrade({ action: "sell", merchantId: merchant.id, actorId: hero.id, itemId: heroKit.id, quantity: 5 });
+          assert.equal(result.reason, "notEnoughItems");
+        });
+
+        it("resells a held item at the buy rate", async () => {
+          const held = merchant.items.find((i) => i.name === "Wound Medical Kit");
+          const result = await api().merchantTrade({ action: "buy", merchantId: merchant.id, actorId: hero.id, source: "held", id: held.id, quantity: 1 });
+          assert.isTrue(result.ok, result.reason);
+          assert.equal(result.total, 300);
+          assert.equal(hero.system.currency, 0);
+          assert.equal(kitsOn(merchant), 1);
+        });
+
+        it("won't undo a sale once the merchant has resold the items", async () => {
+          const sale = log().find((e) => e.action === "sell");
+          const result = await api().merchantTrade({ action: "undo", merchantId: merchant.id, tradeId: sale.id });
+          assert.equal(result.reason, "itemGone");
+        });
+
+        it("undoes the resale, then the sale, and marks both receipts", async () => {
+          const resale = log().at(-1);
+          assert.isTrue((await api().merchantTrade({ action: "undo", merchantId: merchant.id, tradeId: resale.id })).ok);
+          assert.equal(hero.system.currency, 300);
+          assert.equal(kitsOn(merchant), 2);
+          const sale = log().find((e) => e.action === "sell");
+          assert.isTrue((await api().merchantTrade({ action: "undo", merchantId: merchant.id, tradeId: sale.id })).ok);
+          assert.equal(hero.system.currency, 0);
+          assert.equal(kitsOn(hero), 3);
+          assert.equal(kitsOn(merchant), 0);
+          assert.isTrue(receiptOf(resale.id).getFlag(moduleId, "merchantReceipt").undone);
+          assert.isTrue(receiptOf(sale.id).getFlag(moduleId, "merchantReceipt").undone);
+          assert.equal((await api().merchantTrade({ action: "undo", merchantId: merchant.id, tradeId: sale.id })).reason, "alreadyUndone");
+        });
+
+        it("undoes a catalogue purchase and puts the stock back", async () => {
+          await hero.update({ "system.currency": 600 });
+          const bought = await api().merchantTrade({ action: "buy", merchantId: merchant.id, actorId: hero.id, source: "catalogue", id: "kit", quantity: 2 });
+          assert.isTrue(bought.ok, bought.reason);
+          assert.equal(merchant.getFlag(moduleId, "merchant").catalogue[0].count, 0);
+          assert.isTrue((await api().merchantTrade({ action: "undo", merchantId: merchant.id, tradeId: bought.tradeId })).ok);
+          assert.equal(merchant.getFlag(moduleId, "merchant").catalogue[0].count, 2);
+          assert.equal(hero.system.currency, 600);
+          assert.equal(kitsOn(hero), 3);
+        });
+
+        it("waits for the GM to approve a player's trade, and stops it when declined", async () => {
+          player = await globalThis.User.create({ name: "PFM Quench Player", role: CONST.USER_ROLES.PLAYER });
+          await hero.update({ [`ownership.${player.id}`]: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER });
+          await api().setMerchant(merchant, { requireApproval: true });
+          const request = { action: "buy", merchantId: merchant.id, actorId: hero.id, source: "catalogue", id: "kit", quantity: 1 };
+          const cardFor = (seen) => game.messages.find((m) => m.getFlag(moduleId, "merchantApproval") && !seen.includes(m.id) && !m.getFlag(moduleId, "merchantApproval").decided);
+
+          let waited = false;
+          const approvedTrade = handleTrade(moduleId, request, player.id, () => { waited = true; });
+          const card = await waitFor(() => cardFor([]));
+          assert.exists(card, "no approval card");
+          assert.isTrue(waited, "the player was not told the trade is waiting");
+          assert.deepEqual(card.whisper, game.users.filter((u) => u.isGM).map((u) => u.id));
+          decideApproval(moduleId, card.getFlag(moduleId, "merchantApproval").approvalId, true);
+          assert.isTrue((await approvedTrade).ok);
+          assert.equal(hero.system.currency, 300);
+          assert.equal((await waitFor(() => card.getFlag(moduleId, "merchantApproval").decided)), "approved");
+
+          const declinedTrade = handleTrade(moduleId, request, player.id);
+          const second = await waitFor(() => cardFor([card.id]));
+          decideApproval(moduleId, second.getFlag(moduleId, "merchantApproval").approvalId, false);
+          assert.equal((await declinedTrade).reason, "declined");
+          assert.equal(hero.system.currency, 300);
+        });
+
+        it("lets a GM's own trade skip approval", async () => {
+          const result = await api().merchantTrade({ action: "buy", merchantId: merchant.id, actorId: hero.id, source: "catalogue", id: "kit", quantity: 1 });
+          assert.isTrue(result.ok, result.reason);
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: merchant selling" }
   );
 }

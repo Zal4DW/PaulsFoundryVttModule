@@ -1,8 +1,9 @@
-// The merchant window: the stock with prices in gp, sp and cp, the buying hero's purse, and a Buy button per line.
+// The merchant window: the stock with prices in Crucible coin, the hero's purse, a Buy button per line, and a drop
+// zone to sell an item from a hero's sheet.
 import { priceFor } from "../lib/merchant.mjs";
 import { isStackable, merchantData, requestTrade } from "./trade.mjs";
 
-const { ApplicationV2 } = foundry.applications.api;
+const { ApplicationV2, DialogV2 } = foundry.applications.api;
 const L = (key, data) => (data ? game.i18n.format(`PFM.Merchant.${key}`, data) : game.i18n.localize(`PFM.Merchant.${key}`));
 const esc = (s) => foundry.utils.escapeHTML(String(s ?? ""));
 /** Copper as "7GP 2SP 5CP", with Crucible's own formatter. */
@@ -22,13 +23,13 @@ export class MerchantWindow extends ApplicationV2 {
   static DEFAULT_OPTIONS = {
     classes: ["pfm-merchant"],
     window: { icon: "fa-solid fa-scale-balanced", resizable: true },
-    position: { width: 560, height: 620 },
+    position: { width: 560, height: 640 },
     actions: { buy: MerchantWindow.#onBuy }
   };
 
   get title() { return this.merchant.name; }
 
-  /** Heroes this user can buy for: their assigned character first, then the other heroes they own. */
+  /** Heroes this user can trade for: their assigned character first, then the other heroes they own. */
   #heroes() {
     const owned = game.actors.filter((a) => a.type === "hero" && a.isOwner);
     const mine = game.user.character;
@@ -45,6 +46,7 @@ export class MerchantWindow extends ApplicationV2 {
       const item = await fromUuid(line.uuid);
       if (item) rows.push({ source: "catalogue", id: line.id, item, stock: line.count, price: priceFor(item.system.price, data.buyRate, line.price) });
     }
+    // Held items include what heroes sold here: the merchant resells them at the buy rate.
     for (const item of this.merchant.items) rows.push({ source: "held", id: item.id, item, stock: item.system.quantity ?? 1, price: priceFor(item.system.price, data.buyRate) });
     rows.sort((a, b) => a.item.type.localeCompare(b.item.type) || a.item.name.localeCompare(b.item.name));
     return { data, heroes, hero, rows };
@@ -75,7 +77,8 @@ export class MerchantWindow extends ApplicationV2 {
         <span class="pfm-merchant-price">${esc(coin(r.price))}</span>${qty}${button}</li>`;
     }).join("");
     return `<header class="pfm-merchant-head">${heroPick}${purse}${typePick}</header>
-      <ul class="pfm-merchant-stock-list">${body || `<li class="pfm-empty">${esc(L("Empty"))}</li>`}</ul>`;
+      <ul class="pfm-merchant-stock-list">${body || `<li class="pfm-empty">${esc(L("Empty"))}</li>`}</ul>
+      <footer class="pfm-merchant-drop"><i class="fa-solid fa-hand-holding-dollar"></i> ${esc(L("DropToSell", { rate: data.sellRate }))}</footer>`;
   }
 
   _replaceHTML(result, content) { content.innerHTML = result; }
@@ -85,8 +88,11 @@ export class MerchantWindow extends ApplicationV2 {
     this.element.querySelector(".pfm-merchant-type")?.addEventListener("change", (e) => { this.typeFilter = e.target.value; this.render(); });
   }
 
-  /** Re-render when the merchant's stock or the buyer's purse changes, from this client or the GM's. */
+  /** Re-render when the merchant's stock or the hero's purse changes, from this client or the GM's. */
   async _onFirstRender() {
+    // The whole window is the drop zone for selling. The frame survives re-renders, so bind it once.
+    this.element.addEventListener("dragover", (e) => e.preventDefault());
+    this.element.addEventListener("drop", (e) => this.#onDrop(e));
     const watch = (doc) => doc === this.merchant || doc.id === this.heroId || doc.parent === this.merchant || doc.parent?.id === this.heroId;
     const rerender = (doc) => { if (watch(doc)) this.render(); };
     for (const hook of ["updateActor", "createItem", "updateItem", "deleteItem"]) this.hookIds.push([hook, Hooks.on(hook, rerender)]);
@@ -97,13 +103,47 @@ export class MerchantWindow extends ApplicationV2 {
     super._onClose(options);
   }
 
-  static async #onBuy(_event, target) {
-    const quantity = Number(target.closest(".pfm-merchant-row")?.querySelector(".pfm-merchant-qty")?.value ?? 1);
+  /** Send a trade to the GM: a warning if it fails, a note while the GM decides. */
+  async #trade(request) {
     this.busy = true;
     this.render();
-    const result = await requestTrade(this.moduleId, { action: "buy", merchantId: this.merchant.id, actorId: this.heroId, source: target.dataset.source, id: target.dataset.id, quantity });
+    const result = await requestTrade(this.moduleId, request, { onPending: () => ui.notifications.info(L("Waiting")) });
     this.busy = false;
     if (!result.ok) ui.notifications.warn(L(`Reason.${result.reason}`));
     this.render();
+    return result;
+  }
+
+  /** Drop an item from a hero's sheet to sell it. A stack asks how many; a single item asks to confirm. */
+  async #onDrop(event) {
+    event.preventDefault();
+    const drop = foundry.applications.ux.TextEditor.getDragEventData(event);
+    if (drop?.type !== "Item") return;
+    const item = await fromUuid(drop.uuid);
+    const hero = item?.parent;
+    if (hero?.type !== "hero" || !hero.isOwner) { ui.notifications.warn(L("Reason.notYours")); return; }
+    const data = merchantData(this.moduleId, this.merchant);
+    const unit = priceFor(item.system.price, data.sellRate);
+    const have = item.system.quantity ?? 1;
+    const title = L("SellTitle", { item: item.name });
+    let quantity = 1;
+    if (isStackable(item) && have > 1) {
+      // DialogV2.input resolves to the form data, or null when closed (v14 docs).
+      const answer = await DialogV2.input({
+        window: { title },
+        content: `<p>${esc(L("SellEach", { price: coin(unit) }))}</p><input type="number" name="quantity" min="1" max="${have}" value="${have}" autofocus>`,
+        rejectClose: false
+      });
+      if (!answer) return;
+      quantity = Math.floor(Number(answer.quantity));
+    } else if (!(await DialogV2.confirm({ window: { title }, content: `<p>${esc(L("SellConfirm", { item: item.name, price: coin(unit) }))}</p>`, rejectClose: false }))) {
+      return;
+    }
+    await this.#trade({ action: "sell", merchantId: this.merchant.id, actorId: hero.id, itemId: item.id, quantity });
+  }
+
+  static async #onBuy(_event, target) {
+    const quantity = Number(target.closest(".pfm-merchant-row")?.querySelector(".pfm-merchant-qty")?.value ?? 1);
+    await this.#trade({ action: "buy", merchantId: this.merchant.id, actorId: this.heroId, source: target.dataset.source, id: target.dataset.id, quantity });
   }
 }
