@@ -98,21 +98,22 @@ mover's centre cross into the blocker's footprint". The blocker's footprint is r
 footprint is not used at all. Across all sizes, the token lanes matched the centre model except at the exact
 boundary, where a centre that lands on the edge counts as a hit.
 
-Summary per size (wrong vs a model means the move did or did not complete when that model said otherwise; most
-"wrong vs centre" rows are the boundary case or a "Drag again" rejection, see cause 3):
+Summary per size. "Wrong vs" a model means the move did or did not complete when that model said otherwise. Every
+"wrong vs centre" row is a "Drag again" rejection caused by a late Move card (see "Late Move cards in the sweep"), not
+a collision result. Leave those out and the centre model matches every wall and token move.
 
 | Size | Obstacle | Moves | Completed | Wrong vs footprint | Wrong vs centre | Ruler differs from drop | Max overlap ft |
 |---|---|---|---|---|---|---|---|
-| 2 | wall | 6 | 4 | 0 | 1 | 0 | 0.95 |
-| 2 | token | 24 | 18 | 0 | 4 | 0 | 0.95 |
-| 4 | wall | 7 | 4 | 2 | 2 | 0 | 1.95 |
-| 4 | token | 35 | 29 | 6 | 4 | 0 | 3 |
+| 2 | wall | 6 | 4 | 0 | 0 | 0 | 0.95 |
+| 2 | token | 24 | 18 | 0 | 0 | 0 | 0.95 |
+| 4 | wall | 7 | 4 | 2 | 1 | 0 | 1.95 |
+| 4 | token | 35 | 29 | 6 | 0 | 0 | 3 |
 | 5 | wall | 8 | 6 | 2 | 0 | 0 | 2.45 |
 | 5 | token | 40 | 35 | 11 | 1 | 0 | 4 |
-| 8 | wall | 9 | 7 | 3 | 1 | 0 | 3.95 |
-| 8 | token | 45 | 36 | 17 | 7 | 0 | 5 |
-| 10 | wall | 9 | 6 | 4 | 2 | 0 | 4.95 |
-| 10 | token | 45 | 35 | 14 | 8 | 0 | 6 |
+| 8 | wall | 9 | 7 | 3 | 0 | 0 | 3.95 |
+| 8 | token | 45 | 36 | 17 | 3 | 0 | 5 |
+| 10 | wall | 9 | 6 | 4 | 1 | 0 | 4.95 |
+| 10 | token | 45 | 35 | 14 | 4 | 0 | 6 |
 
 "Max overlap" for tokens includes the edge lanes, where the mover passes through without any stop.
 

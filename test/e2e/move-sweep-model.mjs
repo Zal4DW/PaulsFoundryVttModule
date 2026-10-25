@@ -52,7 +52,8 @@ export function stopGap({ obstacle, size, dy = 0, blockerSize = 0 }) {
   const bottom = dy + size;
   const centreY = dy + size / 2;
   const footprintOverlaps = top < blockerSize && bottom > 0;
-  const centreInside = centreY > 0 && centreY < blockerSize;
+  // A centre that lands on the blocker's edge counts as a hit, as it does in the sweep data.
+  const centreInside = centreY >= 0 && centreY <= blockerSize;
   return { footprint: footprintOverlaps ? 0 : null, centre: centreInside ? -size / 2 : null };
 }
 
@@ -60,8 +61,11 @@ export function stopGap({ obstacle, size, dy = 0, blockerSize = 0 }) {
  * Whether a model lets a move to this gap complete.
  * @param {number|null} limit  The model's stop gap, from stopGap
  * @param {number} gap         The planned destination gap
+ * @param {{touchBlocks?: boolean}} [options]  touchBlocks: reaching the limit exactly is a hit. True for the centre
+ *   model, where a centre on a wall face or blocker edge stops the move. The footprint model allows touching.
  */
-export const allows = (limit, gap) => limit === null || gap >= limit;
+export const allows = (limit, gap, { touchBlocks = false } = {}) =>
+  limit === null || (touchBlocks ? gap > limit : gap >= limit);
 
 /**
  * Classify one recorded move.

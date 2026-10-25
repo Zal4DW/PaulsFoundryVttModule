@@ -104,6 +104,7 @@ test("token movement collision sweep", async ({ browser }) => {
   const player = await playerContext.newPage();
   const rows = [];
   let setup = null;
+  let wroteResults = false;
 
   try {
     await join(gm, GM, GM_PASSWORD);
@@ -371,7 +372,7 @@ test("token movement collision sweep", async ({ browser }) => {
             planned: target, ...before, final: { x: after.x, y: after.y }, state: after.state,
             card: !!after.cardId, held: after.held, notes: after.notes, confirm, drop, ms: Date.now() - started,
             outcome: outcome({ planned: target, origin: before.origin, final: { x: after.x, y: after.y } }),
-            footprintAllows: allows(limits.footprint, gap), centreAllows: allows(limits.centre, gap),
+            footprintAllows: allows(limits.footprint, gap), centreAllows: allows(limits.centre, gap, { touchBlocks: true }),
             finalGap: OBSTACLE_X - (after.x + actualSize)
           };
           delete row.messages;
@@ -489,9 +490,11 @@ test("token movement collision sweep", async ({ browser }) => {
     for (const line of pending) console.log("pending", JSON.stringify(line));
 
     writeFileSync(`${OUT}/results.json`, JSON.stringify({ setup, rows, pending }, null, 2));
+    wroteResults = true;
     writeFileSync(`${OUT}/results.md`, toMarkdown(rows));
   } finally {
-    if (rows.length) writeFileSync(`${OUT}/results.json`, JSON.stringify({ setup, rows }, null, 2));
+    // A run that failed part way still saves the rows it has. A full run already wrote them with the timing log.
+    if (rows.length && !wroteResults) writeFileSync(`${OUT}/results.json`, JSON.stringify({ setup, rows }, null, 2));
     await player.evaluate(() => game.logOut?.()).catch(() => {});
     await playerContext.close();
     if (setup) {

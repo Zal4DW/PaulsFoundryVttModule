@@ -15,6 +15,10 @@ describe("move sweep model", () => {
     expect(stopGap({ obstacle: "token", size: 10, dy: -9, blockerSize: 4 })).toEqual({ footprint: 0, centre: null });
   });
 
+  it("counts a centre on the blocker's edge as a hit", () => {
+    expect(stopGap({ obstacle: "token", size: 4, dy: -2, blockerSize: 4 })).toEqual({ footprint: 0, centre: -2 });
+  });
+
   it("treats a touching lane as clear in both models", () => {
     expect(stopGap({ obstacle: "token", size: 4, dy: -4, blockerSize: 4 })).toEqual({ footprint: null, centre: null });
   });
@@ -29,6 +33,8 @@ describe("move sweep model", () => {
     expect(allows(0, 0)).toBe(true);
     expect(allows(0, -1)).toBe(false);
     expect(allows(null, -10)).toBe(true);
+    expect(allows(-2, -2, { touchBlocks: true })).toBe(false);
+    expect(allows(-2, -1, { touchBlocks: true })).toBe(true);
   });
 
   it("classifies a move by its final position", () => {
