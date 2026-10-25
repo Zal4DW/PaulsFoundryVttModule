@@ -16,6 +16,7 @@ import { registerHiddenCollision } from "./hidden-collision.mjs";
 import { registerElevationBadge } from "./elevation-badge.mjs";
 import { registerStashBridge } from "./stash-bridge.mjs";
 import { registerFled } from "./stats/fled.mjs";
+import { registerMerchant } from "./merchant/index.mjs";
 
 const MODULE_ID = "pauls-foundry-module";
 const STATS_PATTERN = /^\/stats\s*$/i;
@@ -138,6 +139,8 @@ Hooks.once("init", () => {
     });
   }
 
+  const merchantApi = registerMerchant(MODULE_ID);
+
   // Public API, used by macros and by the Quench tests.
   game.modules.get(MODULE_ID).api = { sayHello, openParty, openCharacter, openStats, openChronicle, importFight, toggleGrip,
     importHistory: (options) => importHistory(MODULE_ID, options), promptImportHistory,
@@ -151,7 +154,9 @@ Hooks.once("init", () => {
     rebuildFight: (fightId) => rebuildFight(MODULE_ID, fightId),
     addFightNote: (fightId, actorName, text) => addFightNote(MODULE_ID, fightId, actorName, text),
     setFightOutcome: (fightId, result, note) => setFightOutcome(MODULE_ID, fightId, result, note),
-    writeFightJournal: (fightId) => writeFightJournal(MODULE_ID, fightId) };
+    writeFightJournal: (fightId) => writeFightJournal(MODULE_ID, fightId),
+    // Merchants (docs/merchant-plan.md): openMerchant, setMerchant, inviteToMerchant, merchantTrade.
+    ...merchantApi };
 });
 
 // Add "Paul's Items" to Crucible's equipment packs, so Crucible Shop's default shop and character creation list them.

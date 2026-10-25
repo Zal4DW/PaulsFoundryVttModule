@@ -99,3 +99,16 @@ body.pfm-player .item-pile-inventory button:has(> i.fa-save) { display: none; }
   flex: 0 0 2rem;
   margin-left: 0.25rem;
 }
+
+/* Merchant window (scripts/merchant/window.mjs). */
+.pfm-merchant .window-content { display: flex; flex-direction: column; gap: 0.5rem; }
+.pfm-merchant .pfm-merchant-head { display: flex; gap: 0.5rem; align-items: center; }
+.pfm-merchant .pfm-merchant-purse { flex: 1; text-align: center; font-weight: bold; white-space: nowrap; }
+.pfm-merchant .pfm-merchant-stock-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; }
+.pfm-merchant .pfm-merchant-row { display: grid; grid-template-columns: 2rem 1fr 4.5rem 6.5rem 3.5rem 4rem; gap: 0.4rem; align-items: center; padding: 0.2rem 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.pfm-merchant .pfm-merchant-row img { width: 2rem; height: 2rem; border: none; }
+.pfm-merchant .pfm-merchant-row > :last-child { grid-column: 6; }
+.pfm-merchant .pfm-merchant-price { text-align: right; }
+.pfm-merchant .pfm-merchant-row.dear .pfm-merchant-price { opacity: 0.55; }
+.pfm-merchant .pfm-merchant-row.soldout { opacity: 0.5; }
+.pfm-merchant-invite button { width: 100%; }
