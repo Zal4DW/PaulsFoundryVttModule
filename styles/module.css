@@ -118,3 +118,12 @@ body.pfm-player .item-pile-inventory button:has(> i.fa-save) { display: none; }
 .pfm-merchant-undone .pfm-merchant-status { text-decoration: none; }
 .pfm-merchant-status { font-style: italic; margin: 0.25rem 0 0; }
 .pfm-merchant-receipt .pfm-merchant-undo { margin-top: 0.3rem; width: 100%; }
+
+/* Merchant setup and import windows (scripts/merchant/config.mjs, import.mjs). */
+.pfm-merchant-config .pfm-merchant-settings { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
+.pfm-merchant-config .pfm-merchant-settings input[type="number"] { width: 4rem; }
+.pfm-merchant .pfm-merchant-config-list { list-style: none; margin: 0; padding: 0; }
+.pfm-merchant .pfm-merchant-config-row { display: grid; grid-template-columns: 2rem 1fr 5.5rem 4rem 5rem 2rem; gap: 0.4rem; align-items: center; padding: 0.15rem 0; }
+.pfm-merchant .pfm-merchant-config-row.import { grid-template-columns: 1fr 5rem 7rem; }
+.pfm-merchant .pfm-merchant-config-row img { width: 2rem; height: 2rem; border: none; }
+.pfm-merchant .pfm-merchant-config-buttons { display: flex; gap: 0.4rem; margin-top: 0.5rem; }

@@ -2,6 +2,8 @@
 import { MERCHANT_FLAG, normaliseMerchant } from "../lib/merchant.mjs";
 import { decideApproval, isWaitingApproval, merchantData, registerMerchantSocket, requestTrade } from "./trade.mjs";
 import { MerchantWindow } from "./window.mjs";
+import { MerchantConfig } from "./config.mjs";
+import { importCrucibleShop, importItemPilesMerchant, MerchantImport } from "./import.mjs";
 
 const L = (key, data) => (data ? game.i18n.format(`PFM.Merchant.${key}`, data) : game.i18n.localize(`PFM.Merchant.${key}`));
 const actorOf = (actorOrId) => (typeof actorOrId === "string" ? game.actors.get(actorOrId) ?? fromUuidSync(actorOrId) : actorOrId);
@@ -51,8 +53,60 @@ export async function inviteToMerchant(moduleId, actorOrId, userIds = []) {
   });
 }
 
+/** GM only: open an actor's merchant setup window. The actor becomes a merchant when the GM saves. */
+export function configureMerchant(moduleId, actorOrId) {
+  const actor = actorOf(actorOrId);
+  const open = foundry.applications.instances.get(`pfm-merchant-config-${actor.id}`);
+  if (open) { open.bringToFront(); return open; }
+  const app = new MerchantConfig(moduleId, actor);
+  app.render({ force: true });
+  return app;
+}
+
+/** Call from init. */
 export function registerMerchant(moduleId) {
   Hooks.once("ready", () => registerMerchantSocket(moduleId));
+
+  game.settings.registerMenu(moduleId, "merchantImport", {
+    name: "PFM.Merchant.ImportTitle",
+    label: "PFM.Merchant.ImportButton",
+    hint: "PFM.Merchant.ImportMenuHint",
+    icon: "fa-solid fa-file-import",
+    type: MerchantImport,
+    restricted: true
+  });
+
+  // Actors sidebar: "Merchant setup" for the GM, and "Open shop" for anyone on a merchant. The v14 directory fires
+  // get{documentName}ContextOptions (client/applications/sidebar/document-directory.mjs).
+  Hooks.on("getActorContextOptions", (_app, items) => {
+    const actorFrom = (li) => game.actors.get(li.dataset.entryId);
+    // The same entry shape as the fled entries in scripts/stats/fled.mjs: label, icon, visible(li), onClick(event, li).
+    items.push({
+      label: "PFM.Merchant.Setup", icon: '<i class="fa-solid fa-store"></i>',
+      visible: (li) => game.user.isGM && actorFrom(li)?.type !== "hero",
+      onClick: (_event, li) => configureMerchant(moduleId, actorFrom(li))
+    }, {
+      label: "PFM.Merchant.Open", icon: '<i class="fa-solid fa-scale-balanced"></i>',
+      visible: (li) => !!merchantData(moduleId, actorFrom(li))?.enabled,
+      onClick: (_event, li) => openMerchant(moduleId, actorFrom(li))
+    });
+  });
+
+  // A player's double-click on a merchant's token opens the shop, not the actor's Limited sheet. v14 has no hook for
+  // this (Token#_onClickLeft2 renders the sheet), so extend the token class after the system has set its own.
+  Hooks.once("setup", () => {
+    const Base = CONFIG.Token.objectClass;
+    CONFIG.Token.objectClass = class MerchantToken extends Base {
+      _onClickLeft2(event) {
+        if (!game.user.isGM && merchantData(moduleId, this.actor)?.enabled) {
+          event.stopPropagation();
+          openMerchant(moduleId, this.actor);
+          return;
+        }
+        return super._onClickLeft2(event);
+      }
+    };
+  });
   // The cards' buttons. A card's HTML is rebuilt on each render, so bind them every time.
   Hooks.on("renderChatMessageHTML", (message, html) => {
     for (const button of html.querySelectorAll(".pfm-merchant-open")) {
@@ -65,7 +119,10 @@ export function registerMerchant(moduleId) {
     openMerchant: (actor, options) => openMerchant(moduleId, actor, options),
     setMerchant: (actor, data) => setMerchant(moduleId, actor, data),
     inviteToMerchant: (actor, userIds) => inviteToMerchant(moduleId, actor, userIds),
-    merchantTrade: (request, options) => requestTrade(moduleId, request, options)
+    merchantTrade: (request, options) => requestTrade(moduleId, request, options),
+    configureMerchant: (actor) => configureMerchant(moduleId, actor),
+    importCrucibleShop: (shopId) => importCrucibleShop(moduleId, shopId),
+    importItemPilesMerchant: (actor) => importItemPilesMerchant(moduleId, actorOf(actor))
   };
 }
 
