@@ -268,4 +268,102 @@ export function registerQuenchBatches(quench, moduleId) {
     },
     { displayName: "Paul's Foundry Module: fled adversaries" }
   );
+
+  quench.registerBatch(
+    `${moduleId}.merchant`,
+    (context) => {
+      const { describe, it, assert, before, after } = context;
+      const api = () => game.modules.get(moduleId).api;
+      let merchant, hero, kitUuid;
+      const flag = () => merchant.getFlag(moduleId, "merchant");
+      const buy = (id, quantity, source = "catalogue") => api().merchantTrade({ action: "buy", merchantId: merchant.id, actorId: hero.id, source, id, quantity });
+
+      describe("Merchant trades", function () {
+        this.timeout(20_000);
+
+        before(async function () {
+          if (game.system.id !== "crucible" || !game.user.isGM) this.skip();
+          const pack = game.packs.get(`${moduleId}.items`);
+          const kit = (await pack.getIndex()).find((e) => e.name === "Wound Medical Kit");
+          kitUuid = kit.uuid;
+          merchant = await Actor.create({ name: "PFM Quench Merchant", type: "adversary" });
+          // Not rendered, so the blank hero never opens Crucible's character builder.
+          hero = await Actor.create({ name: "PFM Quench Buyer", type: "hero", system: { currency: 1000 } });
+          await api().setMerchant(merchant, { buyRate: 50, catalogue: [{ id: "kit", uuid: kitUuid, count: 3 }] });
+        });
+
+        after(async () => {
+          const receipts = game.messages.filter((m) => m.getFlag(moduleId, "merchantReceipt")?.merchantId === merchant?.id);
+          if (receipts.length) await ChatMessage.deleteDocuments(receipts.map((m) => m.id));
+          await merchant?.delete();
+          await hero?.delete();
+        });
+
+        it("makes the merchant visible to players", () => {
+          assert.isAtLeast(merchant.ownership.default, CONST.DOCUMENT_OWNERSHIP_LEVELS.LIMITED);
+        });
+
+        it("sells from the catalogue at the buy rate and stacks the items", async () => {
+          const result = await buy("kit", 2);
+          assert.isTrue(result.ok, result.reason);
+          assert.equal(result.total, 300); // 2 × 300cp at 50%
+          assert.equal(hero.system.currency, 700);
+          const kits = hero.items.filter((i) => i.name === "Wound Medical Kit");
+          assert.lengthOf(kits, 1);
+          assert.equal(kits[0].system.quantity, 2);
+          assert.equal(kits[0]._stats.compendiumSource, kitUuid);
+          assert.equal(flag().catalogue[0].count, 1);
+          assert.lengthOf(flag().log, 1);
+        });
+
+        it("refuses more than is in stock, then sells out", async () => {
+          assert.equal((await buy("kit", 2)).reason, "notEnoughStock");
+          assert.isTrue((await buy("kit", 1)).ok);
+          assert.equal((await buy("kit", 1)).reason, "soldOut");
+          assert.equal(hero.system.currency, 550);
+        });
+
+        it("gives the last one to only one of two buyers at once", async () => {
+          await api().setMerchant(merchant, { catalogue: [{ id: "kit", uuid: kitUuid, count: 1 }] });
+          const results = await Promise.all([buy("kit", 1), buy("kit", 1)]);
+          assert.deepEqual(results.map((r) => r.ok ? "ok" : r.reason).sort(), ["ok", "soldOut"]);
+          assert.equal(hero.system.currency, 400);
+        });
+
+        it("refuses a hero who can't pay", async () => {
+          await api().setMerchant(merchant, { catalogue: [{ id: "kit", uuid: kitUuid, count: null }] });
+          assert.equal((await buy("kit", 3)).reason, "notEnoughCoin");
+          assert.equal(hero.system.currency, 400);
+        });
+
+        it("sells the merchant's own held items and removes them when gone", async () => {
+          const kit = (await fromUuid(kitUuid)).toObject();
+          kit.system.quantity = 2;
+          const [held] = await merchant.createEmbeddedDocuments("Item", [kit]);
+          assert.isTrue((await buy(held.id, 2, "held")).ok);
+          assert.isFalse(merchant.items.has(held.id));
+          assert.equal(hero.items.find((i) => i.name === "Wound Medical Kit").system.quantity, 6);
+        });
+
+        it("posts a receipt priced in Crucible coin", () => {
+          const last = game.messages.filter((m) => m.getFlag(moduleId, "merchantReceipt")?.merchantId === merchant.id).at(-1);
+          assert.exists(last);
+          assert.include(last.content, globalThis.crucible.api.documents.CrucibleItem.formatCurrency(300));
+        });
+
+        it("opens the window with the stock and the purse in Crucible coin", async () => {
+          const app = api().openMerchant(merchant, { heroId: hero.id });
+          await new Promise((r) => setTimeout(r, 500));
+          try {
+            assert.isTrue(app.rendered);
+            assert.include(app.element.querySelector(".pfm-merchant-purse").textContent, globalThis.crucible.api.documents.CrucibleItem.formatCurrency(hero.system.currency));
+            assert.isAtLeast(app.element.querySelectorAll(".pfm-merchant-row").length, 1);
+          } finally {
+            await app.close();
+          }
+        });
+      });
+    },
+    { displayName: "Paul's Foundry Module: merchants" }
+  );
 }
