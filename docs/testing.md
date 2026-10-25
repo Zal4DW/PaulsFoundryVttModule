@@ -122,6 +122,8 @@ Tongs replaces Foundry's macro hotbar while it shows a character, and its Macro 
 
 The smoke test joins the world, checks the server is v14 and the module is active, sends `/hello`, and runs the Quench batches. It skips the Quench step if Quench is not active.
 
+`test/e2e/move-sweep.spec.mjs` is an opt-in sweep of token movement against walls and blocking tokens. It skips unless `PFM_MOVE_SWEEP=1` is set, and takes about 5 minutes per token size. See `docs/movement-collision.md` for how to run it and what it found.
+
 ## Known limits
 
 - Quench 0.10.0 declares Foundry 13 as verified. On v14 (build 369) it works, with two quirks. It logs deprecation warnings for the globals `Game` and `FilePicker`, which v15 will remove. Its reporter also throws `Cannot read properties of undefined (reading 'querySelector')` and the run never ends if the Quench window is not open. The smoke test calls `quench.app.render(true)` before `runBatches` to avoid this.

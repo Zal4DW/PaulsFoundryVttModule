@@ -2,14 +2,16 @@
 //
 // Opt-in, because it takes several minutes and changes the world while it runs:
 //   PFM_MOVE_SWEEP=1 npx playwright test test/e2e/move-sweep.spec.mjs
-// Narrow it with PFM_SWEEP_SIZES=4,10 and PFM_SWEEP_OBSTACLES=wall,token,hidden,dark.
+// Narrow it with PFM_SWEEP_SIZES=4,10 and PFM_SWEEP_OBSTACLES=wall,token,hidden,dark (or actors, or none).
+// PFM_SWEEP_TIMING=0 skips the Confirm timing scenario. Take the shared server lock first (docs/movement-collision.md).
 //
 // The GM joins in one browser and builds a throwaway microgrid scene, actors, a combat and a player user. The player
-// joins in a second browser with "Confirm my own movement" on, drags a token towards a wall or a blocking token with
-// the real mouse, in steps that get closer each time, and clicks the module's Confirm button on each Move card.
+// joins in a second browser with "Confirm my own movement" on, drops a token towards a wall or a blocking token in
+// steps that get closer each time, and clicks the module's Confirm button on each Move card. Headless Foundry runs at
+// about 3 FPS, too slow for a real mouse drag, so the drop sends the same update core's drag-drop sends.
 // Each move records the planned and final positions, the token's centre and bounds, and what Foundry's preview
 // constraint (the ruler), the real constraint (the drop) and Crucible's collision test said.
-// Results go to test-results/move-sweep/. The GM deletes everything it created at the end.
+// Results go to sweep-results/, and each move is also logged as a "row" line. The GM deletes what it created.
 // The findings are in docs/movement-collision.md.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
@@ -51,7 +53,7 @@ async function join(page, user, password = "") {
 // Other kinds of blocking token, for PFM_SWEEP_OBSTACLES=actors. Crucible's isBlocker
 // (module/canvas/movement-polygon.mjs) skips dead actors, Secret tokens for players, and tokens on another level, but
 // checks nothing about disposition, ownership or combat for the blocker itself.
-const BLOCKER_KINDS = [
+const ALL_BLOCKER_KINDS = [
   { key: "ownHero", label: "a hero the same player owns", type: "hero", disposition: "FRIENDLY", owned: true },
   { key: "otherHero", label: "another player's hero", type: "hero", disposition: "FRIENDLY" },
   { key: "neutral", label: "a neutral adversary", disposition: "NEUTRAL" },
@@ -60,6 +62,8 @@ const BLOCKER_KINDS = [
   { key: "defeated", label: "a hostile adversary at 0 health", defeated: true },
   { key: "large", label: "a hostile 8 ft adversary", size: 8 }
 ];
+// PFM_SWEEP_KINDS=defeated,secret runs only those kinds of blocker.
+const BLOCKER_KINDS = ALL_BLOCKER_KINDS.filter((k) => !process.env.PFM_SWEEP_KINDS || process.env.PFM_SWEEP_KINDS.split(",").includes(k.key));
 
 /** Every case for one mover size: the obstacle, the lane and a label. */
 function casesFor(size, setup) {
@@ -142,10 +146,18 @@ test("token movement collision sweep", async ({ browser }) => {
       }));
       actorData.push({ name: `${PREFIX} Blocker`, type: "adversary", system: { movement: { sizeBonus: BLOCKER_SIZE - 4 } } });
       const kinds = KINDS ?? [];
+      // A blank hero has a wounds pool of 0, and Crucible counts wounds.value === wounds.max as dead.
+      // So hero blockers start from a copy of a real hero in the world, with no wounds.
+      const template = game.actors.find((a) => a.type === "hero" && !a.name.startsWith(PREFIX)
+        && a.system.resources.wounds.max > 0)?.toObject();
       for (const k of kinds) {
-        actorData.push({ name: `${PREFIX} Blocker ${k.key}`, type: k.type ?? "adversary",
+        const base = k.type === "hero" && template ? foundry.utils.deepClone(template) : {};
+        delete base._id;
+        delete base.folder;
+        actorData.push(foundry.utils.mergeObject(base, {
+          name: `${PREFIX} Blocker ${k.key}`, type: k.type ?? "adversary", prototypeToken: { name: `${PREFIX} Blocker ${k.key}` },
           ownership: k.owned ? owner : { default: 0 },
-          system: { movement: { sizeBonus: (k.size ?? BLOCKER_SIZE) - 4 } } });
+          system: { movement: { sizeBonus: (k.size ?? BLOCKER_SIZE) - 4 }, resources: { wounds: { value: 0 } } } }));
       }
       const actors = await Actor.implementation.createDocuments(actorData);
       const kindOf = (a) => kinds.find((k) => a.name === `${PREFIX} Blocker ${k.key}`);
@@ -291,6 +303,9 @@ test("token movement collision sweep", async ({ browser }) => {
               centreHit: hit ? { x: ft(hit.x), y: ft(hit.y) } : null,
               inCombat: token.inCombat,
               blockerVisible: blocker?.visible ?? null,
+              // What this client knows about the blocker: Crucible skips a blocker whose actor is missing or dead.
+              blockerActor: blocker ? { present: !!blocker.actor, dead: blocker.actor?.system.isDead ?? null,
+                health: blocker.actor?.system.resources?.health?.value ?? null } : null,
               messages: game.messages.size,
               heldWaiting: game.messages.filter((m) => m.flags?.crucible?.actor === token.actor.uuid
                 && m.flags?.["pauls-foundry-module"]?.heldForPlayer && !m.flags?.crucible?.confirmed).length,
@@ -332,7 +347,13 @@ test("token movement collision sweep", async ({ browser }) => {
             const button = player.locator(`#chat [data-message-id="${after.cardId}"] button.pfm-confirm-move`).first();
             try {
               await button.waitFor({ state: "visible", timeout: 3000 });
-              await button.click();
+              // A reaction prompt (crucible-reaction-prompts) can open over the chat when the mover comes alongside one
+              // of the player's own heroes. Close any framed window and try the click once more.
+              await button.click({ timeout: 5000 }).catch(async () => {
+                await player.evaluate(() => Promise.all([...foundry.applications.instances.values()]
+                  .filter((a) => a.hasFrame && a.rendered).map((a) => a.close())));
+                await button.click({ timeout: 5000 });
+              });
               confirm = await player.waitForFunction(({ id, moverId }) => {
                 const m = game.messages.get(id);
                 if (!m?.flags?.crucible?.confirmed) return null;
