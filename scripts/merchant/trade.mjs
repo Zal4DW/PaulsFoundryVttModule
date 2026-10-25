@@ -34,25 +34,24 @@ export function registerMerchantSocket(moduleId) {
   game.socket.on(channel, (msg, senderId) => {
     const sender = game.users.get(senderId);
     if (!sender) return;
-    const fromGM = senderId === game.users.activeGM?.id;
     if (msg?.type === "merchantTrade" && game.users.activeGM?.isSelf) {
       const reply = (data) => game.socket.emit(channel, { requestId: msg.requestId, ...data }, { recipients: [senderId] });
       handle(moduleId, msg.request, senderId, () => reply({ type: "merchantPending" })).then((result) => reply({ type: "merchantResult", result }));
     }
-    if (msg?.type === "merchantPending" && fromGM) {
+    // Only the GM the request went to may answer it. The active GM can change while a trade runs.
+    const p = pending.get(msg?.requestId);
+    const fromAskedGM = !!p && senderId === p.gmId;
+    if (msg?.type === "merchantPending" && fromAskedGM) {
       // The GM is deciding, which can take longer than the timeout.
       // Give up after ten minutes, so a GM who reloads with the card open doesn't leave the player waiting forever.
-      const p = pending.get(msg.requestId);
-      if (p) {
-        clearTimeout(p.timer);
-        p.timer = setTimeout(() => { if (pending.delete(msg.requestId)) p.resolve({ ok: false, reason: "timeout" }); }, APPROVAL_TIMEOUT_MS);
-        p.onPending?.();
-      }
+      clearTimeout(p.timer);
+      p.timer = setTimeout(() => { if (pending.delete(msg.requestId)) p.resolve({ ok: false, reason: "timeout" }); }, APPROVAL_TIMEOUT_MS);
+      p.onPending?.();
     }
-    if (msg?.type === "merchantResult" && fromGM) {
-      const p = pending.get(msg.requestId);
+    if (msg?.type === "merchantResult" && fromAskedGM) {
       pending.delete(msg.requestId);
-      if (p) { clearTimeout(p.timer); p.resolve(msg.result); }
+      clearTimeout(p.timer);
+      p.resolve(msg.result);
     }
     // Another GM clicked Approve or Decline. Only a GM may decide.
     if (msg?.type === "merchantApproval" && sender.isGM) resolveApproval(msg.approvalId, msg.approved);
@@ -72,7 +71,7 @@ export function requestTrade(moduleId, request, { onPending } = {}) {
   const requestId = foundry.utils.randomID();
   return new Promise((resolve) => {
     const timer = setTimeout(() => { if (pending.delete(requestId)) resolve({ ok: false, reason: "timeout" }); }, TIMEOUT_MS);
-    pending.set(requestId, { resolve, timer, onPending });
+    pending.set(requestId, { resolve, timer, onPending, gmId: gm.id });
     game.socket.emit(`module.${moduleId}`, { type: "merchantTrade", requestId, request }, { recipients: [gm.id] });
   });
 }
@@ -142,20 +141,20 @@ async function buy(moduleId, { merchantId, actorId, source, id, quantity }, user
 
   // Keep what an undo needs: the held item as it was, and the stacks the hero received.
   const heldData = source === "held" ? { ...item.toObject(), _id: undefined, system: { ...item.toObject().system, quantity } } : null;
+  const snapshot = source === "held" ? item.toObject() : null;
+  const flagPath = `flags.${moduleId}.${MERCHANT_FLAG}`;
   const purse = hero.system.currency;
-  await hero.update({ "system.currency": purse - check.total });
   let given;
-  try {
-    given = await giveTo(hero, item, quantity, line?.uuid ?? null);
-  } catch (err) {
-    // The hero paid but got nothing: give the coin back before the queue logs the error.
-    await hero.update({ "system.currency": purse });
-    throw err;
-  }
-  if (source === "held") await takeFrom(merchant, [{ id: item.id, quantity }]);
+  // Stock first, then coin, then delivery. A failed step undoes the ones before it.
+  await transact(moduleId, [
+    source === "held"
+      ? { run: () => takeFrom(merchant, [{ id: item.id, quantity }]), undo: () => restoreItem(merchant, snapshot) }
+      : { run: () => merchant.update({ [`${flagPath}.catalogue`]: takeFromCatalogue(data.catalogue, id, quantity) }), undo: () => merchant.update({ [`${flagPath}.catalogue`]: data.catalogue }) },
+    { run: () => hero.update({ "system.currency": purse - check.total }), undo: () => hero.update({ "system.currency": purse }) },
+    { run: async () => { given = await giveTo(hero, item, quantity, line?.uuid ?? null); } }
+  ]);
   const entry = { id: foundry.utils.randomID(), ts: Date.now(), action: "buy", userId, actorId, source, lineId: id, uuid: line?.uuid ?? null, name: item.name, quantity, total: check.total, given, heldData };
-  const catalogue = source === "catalogue" ? takeFromCatalogue(data.catalogue, id, quantity) : data.catalogue;
-  await merchant.update({ [`flags.${moduleId}.${MERCHANT_FLAG}`]: { ...data, catalogue, log: logTrade(data.log, entry) } });
+  await merchant.update({ [`${flagPath}.log`]: logTrade(data.log, entry) });
   await postReceipt(moduleId, merchant, hero, entry);
   return { ok: true, total: check.total, tradeId: entry.id };
 }
@@ -173,10 +172,15 @@ async function sell(moduleId, { merchantId, actorId, itemId, quantity }, userId,
   if (!check.ok || dryRun) return { ...check, name: item.name, hero: hero.name, merchant: merchant.name };
 
   const taken = { ...item.toObject(), _id: undefined, system: { ...item.toObject().system, quantity } };
-  await takeFrom(hero, [{ id: item.id, quantity }]);
-  // The merchant resells it at the buy rate, as a held item.
-  const held = await giveTo(merchant, taken, quantity);
-  await hero.update({ "system.currency": (hero.system.currency ?? 0) + check.total });
+  const snapshot = item.toObject();
+  const purse = hero.system.currency ?? 0;
+  let held;
+  // The merchant resells it at the buy rate, as a held item. A failed step undoes the ones before it.
+  await transact(moduleId, [
+    { run: () => takeFrom(hero, [{ id: item.id, quantity }]), undo: () => restoreItem(hero, snapshot) },
+    { run: async () => { held = await giveTo(merchant, taken, quantity); }, undo: () => (held ? takeFrom(merchant, held) : null) },
+    { run: () => hero.update({ "system.currency": purse + check.total }) }
+  ]);
   const entry = { id: foundry.utils.randomID(), ts: Date.now(), action: "sell", userId, actorId, name: item.name, quantity, total: check.total, taken, held };
   await merchant.update({ [`flags.${moduleId}.${MERCHANT_FLAG}.log`]: logTrade(data.log, entry) });
   await postReceipt(moduleId, merchant, hero, entry);
@@ -224,19 +228,50 @@ async function giveTo(actor, source, quantity, uuid = null) {
   delete data._id;
   // Crucible rebuilds an item's loot text from its compendium source, so keep where it came from.
   if (uuid?.startsWith("Compendium.")) foundry.utils.setProperty(data, "_stats.compendiumSource", uuid);
+  // A preCreate hook can veto a creation without an error, and then createEmbeddedDocuments returns fewer documents
+  // than asked for. So check that everything arrived, and remove a partial delivery before throwing.
+  const missing = () => new Error(`${data.name} did not reach ${actor.name}`);
   if (isStackable(data)) {
     const stack = actor.items.find((i) => i.type === data.type && i.name === data.name && isStackable(i));
     if (stack) {
-      await stack.update({ "system.quantity": (stack.system.quantity ?? 1) + quantity });
+      const before = stack.system.quantity ?? 1;
+      await stack.update({ "system.quantity": before + quantity });
+      if ((stack.system.quantity ?? 1) !== before + quantity) throw missing();
       return [{ id: stack.id, quantity }];
     }
     data.system.quantity = quantity;
-    const [created] = await actor.createEmbeddedDocuments("Item", [data]);
-    return [{ id: created.id, quantity }];
+    const created = await actor.createEmbeddedDocuments("Item", [data]);
+    if (created.length !== 1) throw missing();
+    return [{ id: created[0].id, quantity }];
   }
   data.system.quantity = 1;
   const created = await actor.createEmbeddedDocuments("Item", Array.from({ length: quantity }, () => foundry.utils.deepClone(data)));
+  if (created.length !== quantity) {
+    if (created.length) await actor.deleteEmbeddedDocuments("Item", created.map((c) => c.id));
+    throw missing();
+  }
   return created.map((c) => ({ id: c.id, quantity: 1 }));
+}
+
+/** Run steps in order. If one throws, undo the steps that finished, newest first, then rethrow. */
+async function transact(moduleId, steps) {
+  const done = [];
+  try {
+    for (const step of steps) {
+      await step.run();
+      done.push(step);
+    }
+  } catch (err) {
+    for (const step of done.reverse()) await Promise.resolve(step.undo?.()).catch((e) => console.error(`${moduleId} | merchant rollback failed`, e));
+    throw err;
+  }
+}
+
+/** Put an item back as it was: its old quantity if it is still there, else the whole item with its old id. */
+function restoreItem(actor, snapshot) {
+  const item = actor.items.get(snapshot._id);
+  if (item) return item.update({ "system.quantity": snapshot.system.quantity });
+  return actor.createEmbeddedDocuments("Item", [snapshot], { keepId: true });
 }
 
 /** True when the actor still holds every part. */
