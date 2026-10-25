@@ -95,8 +95,8 @@ A 10 ft mover against a 4 ft blocker:
 
 So the answer to "does it go wrong when the centre crosses the blocker's box?" is yes. The test is exactly "would the
 mover's centre cross into the blocker's footprint". The blocker's footprint is right for its size. The mover's
-footprint is not used at all. Across all sizes, the token lanes matched the centre model except at the exact
-boundary, where a centre that lands on the edge counts as a hit.
+footprint is not used at all. A centre that lands exactly on the blocker's edge or the wall face counts as a hit, and
+the model treats it the same way.
 
 Summary per size. "Wrong vs" a model means the move did or did not complete when that model said otherwise. Every
 "wrong vs centre" row is a "Drag again" rejection caused by a late Move card (see "Late Move cards in the sweep"), not
