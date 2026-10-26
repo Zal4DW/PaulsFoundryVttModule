@@ -38,8 +38,9 @@ const pilesData = (doc) => doc.flags?.["item-piles"]?.data ?? null;
  */
 export async function importItemPilesMerchant(moduleId, actor) {
   const piles = pilesData(actor);
+  if (!piles) throw new Error(`${actor.name} has no Item Piles data to import`);
   await game.modules.get(moduleId).api.setMerchant(actor, { ...fromItemPilesMerchant(piles), log: merchantData(moduleId, actor)?.log ?? [] });
-  if (piles) await actor.update({ "flags.item-piles.data.enabled": false });
+  await actor.update({ "flags.item-piles.data.enabled": false });
   // Its placed tokens carry their own copy of the flag.
   for (const scene of game.scenes) {
     const updates = scene.tokens.filter((t) => t.actorId === actor.id && pilesData(t)).map((t) => ({ _id: t.id, "flags.item-piles.data.enabled": false }));

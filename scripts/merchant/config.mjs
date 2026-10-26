@@ -13,10 +13,14 @@ export class MerchantConfig extends ApplicationV2 {
     super({ ...options, id: `pfm-merchant-config-${actor.id}` });
     this.moduleId = moduleId;
     this.actor = actor;
-    // Edits stay here until Save, so a half-typed count doesn't trade. `base` is the stored data the form started
-    // from, so #sync can tell the GM's edits from changes trades made while the window was open.
-    this.base = foundry.utils.deepClone(merchantData(moduleId, actor) ?? normaliseMerchant({ sellRate: 50 }));
-    this.data = foundry.utils.deepClone(this.base);
+    // Edits stay here until Save, so a half-typed count doesn't trade. To tell the GM's edits from changes trades made
+    // while the window was open, #sync compares the form with `base`: the stored data as it was when the form was last
+    // drawn. `stored` is the newest stored data, which becomes `base` once a render has put it in the form. `known` is
+    // the stored catalogue line ids at the last sync, to tell a line deleted elsewhere from one added here.
+    this.data = foundry.utils.deepClone(merchantData(moduleId, actor) ?? normaliseMerchant({ sellRate: 50 }));
+    this.base = foundry.utils.deepClone(this.data);
+    this.stored = foundry.utils.deepClone(this.data);
+    this.known = new Set(this.data.catalogue.map((l) => l.id));
   }
 
   static DEFAULT_OPTIONS = {
@@ -33,7 +37,13 @@ export class MerchantConfig extends ApplicationV2 {
   async _prepareContext() {
     const lines = [];
     for (const line of this.data.catalogue) lines.push({ line, item: await fromUuid(line.uuid) });
-    return { data: this.data, lines, held: [...this.actor.items] };
+    return { data: this.data, lines, held: [...this.actor.items], base: foundry.utils.deepClone(this.stored) };
+  }
+
+  // The form now shows what this render prepared. Until then, #sync compares with the previous render's stored data.
+  _onRender(context, options) {
+    super._onRender(context, options);
+    this.base = context.base;
   }
 
   async _renderHTML({ data, lines, held }) {
@@ -90,6 +100,8 @@ export class MerchantConfig extends ApplicationV2 {
     this.data.buyRate = Number(num("buyRate"));
     this.data.sellRate = Number(num("sellRate"));
     for (const line of this.data.catalogue) {
+      // A line the form doesn't show yet keeps its values.
+      if (!form.elements[`count.${line.id}`]) continue;
       const count = num(`count.${line.id}`);
       const price = num(`price.${line.id}`);
       line.count = count === "" || count === undefined ? null : Number(count);
@@ -104,20 +116,23 @@ export class MerchantConfig extends ApplicationV2 {
    */
   #sync() {
     this.#readForm();
-    const fresh = foundry.utils.deepClone(merchantData(this.moduleId, this.actor) ?? this.base);
-    const edited = (now, was, key) => !was || now[key] !== was[key];
+    this.stored = foundry.utils.deepClone(merchantData(this.moduleId, this.actor) ?? this.stored);
+    const fresh = foundry.utils.deepClone(this.stored);
+    // A value the form never showed can't have been edited, so the stored value wins.
+    const edited = (now, was, key) => !!was && now[key] !== was[key];
     for (const key of ["enabled", "requireApproval", "buyRate", "sellRate"]) if (edited(this.data, this.base, key)) fresh[key] = this.data[key];
-    const baseLine = (id) => this.base.catalogue.find((l) => l.id === id);
-    const catalogue = this.data.catalogue.map((line) => {
+    const shownLine = (id) => this.base.catalogue.find((l) => l.id === id);
+    const catalogue = this.data.catalogue.flatMap((line) => {
       const stored = fresh.catalogue.find((l) => l.id === line.id);
-      if (!stored) return line;
-      const was = baseLine(line.id);
-      return { ...stored, count: edited(line, was, "count") ? line.count : stored.count, price: edited(line, was, "price") ? line.price : stored.price };
+      // Not stored: keep a line the GM added here, drop one deleted elsewhere.
+      if (!stored) return this.known.has(line.id) ? [] : [line];
+      const was = shownLine(line.id);
+      return [{ ...stored, count: edited(line, was, "count") ? line.count : stored.count, price: edited(line, was, "price") ? line.price : stored.price }];
     });
-    // Lines listed elsewhere since the window opened stay, unless the GM removed them here.
-    for (const line of fresh.catalogue) if (!baseLine(line.id) && !catalogue.some((l) => l.id === line.id)) catalogue.push(line);
+    // Lines listed elsewhere since the last sync stay, unless the GM removed them here.
+    for (const line of fresh.catalogue) if (!this.known.has(line.id) && !catalogue.some((l) => l.id === line.id)) catalogue.push(line);
     this.data = { ...fresh, catalogue };
-    this.base = foundry.utils.deepClone(merchantData(this.moduleId, this.actor) ?? this.base);
+    this.known = new Set(fresh.catalogue.map((l) => l.id));
   }
 
   /** Drop an item from a compendium or the Items sidebar to list it. An item already listed isn't added twice. */
