@@ -696,6 +696,11 @@ export function registerQuenchBatches(quench, moduleId) {
       const api = () => game.modules.get(moduleId).api;
       const made = [];
       let kitUuid;
+      // Poll for up to 5 seconds, so a slow render or save doesn't fail the test.
+      const until = async (test) => {
+        for (let i = 0; i < 100 && !test(); i++) await new Promise((r) => setTimeout(r, 50));
+        return Boolean(test());
+      };
 
       describe("Merchant setup and import", function () {
         this.timeout(20_000);
@@ -716,13 +721,13 @@ export function registerQuenchBatches(quench, moduleId) {
         });
 
         // The v14 docs list getDocumentContextOptions only. The directory builds the hook name from the document name
-        // (client/applications/sidebar/document-directory.mjs), so this fails if Foundry stops firing it for actors.
+        // and passes parentClassHooks: false (DocumentDirectory#_createContextMenus), so this calls it the same way.
         it("adds Merchant setup and Open shop to the Actors sidebar menu", function () {
           if (!ui.actors?._getEntryContextOptions) this.skip();
           let items = null;
           const hookId = Hooks.on("getActorContextOptions", (_app, menuItems) => { items = menuItems; });
           try {
-            ui.actors._doEvent(ui.actors._getEntryContextOptions, { hookName: `get${ui.actors.documentName}ContextOptions`, hookResponse: true });
+            ui.actors._doEvent(ui.actors._getEntryContextOptions, { hookName: `get${ui.actors.documentName}ContextOptions`, parentClassHooks: false, hookResponse: true });
           } finally {
             Hooks.off("getActorContextOptions", hookId);
           }
@@ -755,6 +760,52 @@ export function registerQuenchBatches(quench, moduleId) {
           }
         });
 
+        // A trade while the window is open changes the count and the log. Save used to write the window's old copy back.
+        it("keeps trades made while the setup window is open when the GM saves", async () => {
+          const actor = await Actor.create({ name: "PFM Quench Open Setup", type: "adversary" });
+          const hero = await Actor.create({ name: "PFM Quench Open Buyer", type: "hero", system: { currency: 1000 } });
+          made.push(actor.id, hero.id);
+          await api().setMerchant(actor, { catalogue: [{ id: "kit", uuid: kitUuid, count: 5 }] });
+          const app = api().configureMerchant(actor);
+          assert.isTrue(await until(() => app.rendered && app.element?.elements?.buyRate), "the setup window did not render");
+          try {
+            app.element.elements.buyRate.value = "90";
+            const result = await api().merchantTrade({ action: "buy", merchantId: actor.id, actorId: hero.id, source: "catalogue", id: "kit", quantity: 2 });
+            assert.isTrue(result.ok, result.reason);
+            assert.isTrue(await until(() => app.element.elements["count.kit"]?.value === "3"), "the window shows the new count");
+            assert.equal(app.element.elements.buyRate.value, "90", "the GM's unsaved edit survives the refresh");
+            app.element.requestSubmit();
+            assert.isTrue(await until(() => actor.getFlag(moduleId, "merchant").buyRate === 90), "Save did not finish");
+            const data = actor.getFlag(moduleId, "merchant");
+            assert.equal(data.buyRate, 90);
+            assert.equal(data.catalogue[0].count, 3);
+            assert.lengthOf(data.log, 1, "Save kept the trade log");
+          } finally {
+            await app.close();
+            const receipts = game.messages.filter((m) => m.getFlag(moduleId, "merchantReceipt")?.merchantId === actor.id);
+            if (receipts.length) await ChatMessage.deleteDocuments(receipts.map((m) => m.id));
+          }
+        });
+
+        it("doesn't bring back a catalogue line deleted elsewhere when the GM saves", async () => {
+          const actor = await Actor.create({ name: "PFM Quench Deleted Line", type: "adversary" });
+          made.push(actor.id);
+          await api().setMerchant(actor, { catalogue: [{ id: "kit", uuid: kitUuid, count: 5 }] });
+          const app = api().configureMerchant(actor);
+          assert.isTrue(await until(() => app.rendered && app.element?.elements?.["count.kit"]), "the setup window did not render");
+          try {
+            // Another GM removes the line while this window is open.
+            await api().setMerchant(actor, { ...actor.getFlag(moduleId, "merchant"), catalogue: [] });
+            assert.isTrue(await until(() => !app.element.elements["count.kit"]), "the window still shows the deleted line");
+            app.element.elements.buyRate.value = "60";
+            app.element.requestSubmit();
+            assert.isTrue(await until(() => actor.getFlag(moduleId, "merchant").buyRate === 60), "Save did not finish");
+            assert.lengthOf(actor.getFlag(moduleId, "merchant").catalogue, 0);
+          } finally {
+            await app.close();
+          }
+        });
+
         it("turns an Item Piles merchant into ours, keeps its items and turns Item Piles off", async () => {
           const kit = (await fromUuid(kitUuid)).toObject();
           kit.system.quantity = 2;
@@ -765,7 +816,8 @@ export function registerQuenchBatches(quench, moduleId) {
           const data = actor.getFlag(moduleId, "merchant");
           assert.equal(data.buyRate, 50);
           assert.equal(data.sellRate, 25);
-          assert.isFalse(actor.getFlag("item-piles", "data").enabled);
+          // Read the flag directly: getFlag throws while Item Piles is turned off, and the import must work then too.
+          assert.isFalse(actor.flags["item-piles"].data.enabled);
           assert.equal(actor.items.find((i) => i.name === "Wound Medical Kit").system.quantity, 2);
         });
 
