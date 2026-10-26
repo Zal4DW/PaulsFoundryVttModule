@@ -716,13 +716,13 @@ export function registerQuenchBatches(quench, moduleId) {
         });
 
         // The v14 docs list getDocumentContextOptions only. The directory builds the hook name from the document name
-        // (client/applications/sidebar/document-directory.mjs), so this fails if Foundry stops firing it for actors.
+        // and passes parentClassHooks: false (DocumentDirectory#_createContextMenus), so this calls it the same way.
         it("adds Merchant setup and Open shop to the Actors sidebar menu", function () {
           if (!ui.actors?._getEntryContextOptions) this.skip();
           let items = null;
           const hookId = Hooks.on("getActorContextOptions", (_app, menuItems) => { items = menuItems; });
           try {
-            ui.actors._doEvent(ui.actors._getEntryContextOptions, { hookName: `get${ui.actors.documentName}ContextOptions`, hookResponse: true });
+            ui.actors._doEvent(ui.actors._getEntryContextOptions, { hookName: `get${ui.actors.documentName}ContextOptions`, parentClassHooks: false, hookResponse: true });
           } finally {
             Hooks.off("getActorContextOptions", hookId);
           }
@@ -765,7 +765,8 @@ export function registerQuenchBatches(quench, moduleId) {
           const data = actor.getFlag(moduleId, "merchant");
           assert.equal(data.buyRate, 50);
           assert.equal(data.sellRate, 25);
-          assert.isFalse(actor.getFlag("item-piles", "data").enabled);
+          // Read the flag directly: getFlag throws while Item Piles is turned off, and the import must work then too.
+          assert.isFalse(actor.flags["item-piles"].data.enabled);
           assert.equal(actor.items.find((i) => i.name === "Wound Medical Kit").system.quantity, 2);
         });
 

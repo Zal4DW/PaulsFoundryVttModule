@@ -29,17 +29,20 @@ export async function importCrucibleShop(moduleId, shopId) {
   return actor;
 }
 
+// Read the flag directly: getFlag throws while Item Piles is turned off, and a GM may turn it off before importing.
+const pilesData = (doc) => doc.flags?.["item-piles"]?.data ?? null;
+
 /**
  * Make an Item Piles merchant one of ours. Its items stay as held items, and Item Piles is turned off on the actor,
  * so a double-click on its token opens our window, not Item Piles'.
  */
 export async function importItemPilesMerchant(moduleId, actor) {
-  const piles = actor.getFlag("item-piles", "data");
+  const piles = pilesData(actor);
   await game.modules.get(moduleId).api.setMerchant(actor, { ...fromItemPilesMerchant(piles), log: merchantData(moduleId, actor)?.log ?? [] });
   if (piles) await actor.update({ "flags.item-piles.data.enabled": false });
   // Its placed tokens carry their own copy of the flag.
   for (const scene of game.scenes) {
-    const updates = scene.tokens.filter((t) => t.actorId === actor.id && t.getFlag("item-piles", "data")).map((t) => ({ _id: t.id, "flags.item-piles.data.enabled": false }));
+    const updates = scene.tokens.filter((t) => t.actorId === actor.id && pilesData(t)).map((t) => ({ _id: t.id, "flags.item-piles.data.enabled": false }));
     if (updates.length) await scene.updateEmbeddedDocuments("Token", updates);
   }
   return actor;
@@ -60,7 +63,7 @@ export class MerchantImport extends ApplicationV2 {
   async _prepareContext() {
     const id = MerchantImport.moduleId;
     const shops = importableShops(crucibleShops()).map((s) => ({ id: s.id, name: s.name, count: s.itemUuids.length, done: !!actorForShop(id, s.id) }));
-    const piles = game.actors.filter((a) => isItemPilesMerchant(a.getFlag("item-piles", "data"))).map((a) => ({ id: a.id, name: a.name, count: a.items.size }));
+    const piles = game.actors.filter((a) => isItemPilesMerchant(pilesData(a))).map((a) => ({ id: a.id, name: a.name, count: a.items.size }));
     return { shops, piles };
   }
 
