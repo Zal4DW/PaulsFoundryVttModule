@@ -755,6 +755,34 @@ export function registerQuenchBatches(quench, moduleId) {
           }
         });
 
+        // A trade while the window is open changes the count and the log. Save used to write the window's old copy back.
+        it("keeps trades made while the setup window is open when the GM saves", async () => {
+          const actor = await Actor.create({ name: "PFM Quench Open Setup", type: "adversary" });
+          const hero = await Actor.create({ name: "PFM Quench Open Buyer", type: "hero", system: { currency: 1000 } });
+          made.push(actor.id, hero.id);
+          await api().setMerchant(actor, { catalogue: [{ id: "kit", uuid: kitUuid, count: 5 }] });
+          const app = api().configureMerchant(actor);
+          await new Promise((r) => setTimeout(r, 500));
+          try {
+            app.element.elements.buyRate.value = "90";
+            const result = await api().merchantTrade({ action: "buy", merchantId: actor.id, actorId: hero.id, source: "catalogue", id: "kit", quantity: 2 });
+            assert.isTrue(result.ok, result.reason);
+            await new Promise((r) => setTimeout(r, 500));
+            assert.equal(app.element.elements["count.kit"].value, "3", "the window shows the new count");
+            assert.equal(app.element.elements.buyRate.value, "90", "the GM's unsaved edit survives the refresh");
+            app.element.requestSubmit();
+            await new Promise((r) => setTimeout(r, 800));
+            const data = actor.getFlag(moduleId, "merchant");
+            assert.equal(data.buyRate, 90);
+            assert.equal(data.catalogue[0].count, 3);
+            assert.lengthOf(data.log, 1, "Save kept the trade log");
+          } finally {
+            await app.close();
+            const receipts = game.messages.filter((m) => m.getFlag(moduleId, "merchantReceipt")?.merchantId === actor.id);
+            if (receipts.length) await ChatMessage.deleteDocuments(receipts.map((m) => m.id));
+          }
+        });
+
         it("turns an Item Piles merchant into ours, keeps its items and turns Item Piles off", async () => {
           const kit = (await fromUuid(kitUuid)).toObject();
           kit.system.quantity = 2;

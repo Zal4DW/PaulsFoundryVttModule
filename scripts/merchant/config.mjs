@@ -13,8 +13,10 @@ export class MerchantConfig extends ApplicationV2 {
     super({ ...options, id: `pfm-merchant-config-${actor.id}` });
     this.moduleId = moduleId;
     this.actor = actor;
-    // Edits stay here until Save, so a half-typed count doesn't trade.
-    this.data = foundry.utils.deepClone(merchantData(moduleId, actor) ?? normaliseMerchant({ sellRate: 50 }));
+    // Edits stay here until Save, so a half-typed count doesn't trade. `base` is the stored data the form started
+    // from, so #sync can tell the GM's edits from changes trades made while the window was open.
+    this.base = foundry.utils.deepClone(merchantData(moduleId, actor) ?? normaliseMerchant({ sellRate: 50 }));
+    this.data = foundry.utils.deepClone(this.base);
   }
 
   static DEFAULT_OPTIONS = {
@@ -68,7 +70,7 @@ export class MerchantConfig extends ApplicationV2 {
   async _onFirstRender() {
     this.element.addEventListener("dragover", (e) => e.preventDefault());
     this.element.addEventListener("drop", (e) => this.#onDrop(e));
-    this.hookId = Hooks.on("updateActor", (doc) => { if (doc === this.actor) this.render(); });
+    this.hookId = Hooks.on("updateActor", (doc) => { if (doc === this.actor) { this.#sync(); this.render(); } });
     for (const hook of ["createItem", "updateItem", "deleteItem"]) (this.itemHooks ??= []).push([hook, Hooks.on(hook, (doc) => { if (doc.parent === this.actor) this.render(); })]);
   }
 
@@ -96,6 +98,28 @@ export class MerchantConfig extends ApplicationV2 {
     this.data = normaliseMerchant(this.data);
   }
 
+  /**
+   * Start again from the stored data and reapply only what the GM changed in the form. A trade made while the window
+   * is open changes stock counts and the log, and Save must not put back the counts or drop the log entries.
+   */
+  #sync() {
+    this.#readForm();
+    const fresh = foundry.utils.deepClone(merchantData(this.moduleId, this.actor) ?? this.base);
+    const edited = (now, was, key) => !was || now[key] !== was[key];
+    for (const key of ["enabled", "requireApproval", "buyRate", "sellRate"]) if (edited(this.data, this.base, key)) fresh[key] = this.data[key];
+    const baseLine = (id) => this.base.catalogue.find((l) => l.id === id);
+    const catalogue = this.data.catalogue.map((line) => {
+      const stored = fresh.catalogue.find((l) => l.id === line.id);
+      if (!stored) return line;
+      const was = baseLine(line.id);
+      return { ...stored, count: edited(line, was, "count") ? line.count : stored.count, price: edited(line, was, "price") ? line.price : stored.price };
+    });
+    // Lines listed elsewhere since the window opened stay, unless the GM removed them here.
+    for (const line of fresh.catalogue) if (!baseLine(line.id) && !catalogue.some((l) => l.id === line.id)) catalogue.push(line);
+    this.data = { ...fresh, catalogue };
+    this.base = foundry.utils.deepClone(merchantData(this.moduleId, this.actor) ?? this.base);
+  }
+
   /** Drop an item from a compendium or the Items sidebar to list it. An item already listed isn't added twice. */
   async #onDrop(event) {
     event.preventDefault();
@@ -120,7 +144,7 @@ export class MerchantConfig extends ApplicationV2 {
   }
 
   static async #onSubmit() {
-    this.#readForm();
+    this.#sync();
     await game.modules.get(this.moduleId).api.setMerchant(this.actor, this.data);
     ui.notifications.info(L("Saved", { name: this.actor.name }));
   }
