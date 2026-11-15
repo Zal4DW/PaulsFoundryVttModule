@@ -169,6 +169,8 @@ test.describe("Paul's Foundry Module smoke test", () => {
   });
 
   test("Quench batches pass", async ({ page }) => {
+    // The batches alone take about 50 seconds on a warm server, so the default 60 second budget is too tight.
+    test.setTimeout(180_000);
     const hasQuench = await page.evaluate(() => typeof globalThis.quench !== "undefined");
     test.skip(!hasQuench, "Quench is not active in the test world");
 

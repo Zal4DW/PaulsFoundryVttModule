@@ -20,7 +20,8 @@ const foundryGlobals = {
 };
 
 export default [
-  { ignores: ["node_modules/", ".foundry/", "test-results/", "playwright-report/"] },
+  // .claude/ holds other sessions' worktrees, each a full copy of the repo.
+  { ignores: ["node_modules/", ".foundry/", ".claude/", "test-results/", "playwright-report/"] },
   js.configs.recommended,
   {
     files: ["scripts/**/*.mjs"],
